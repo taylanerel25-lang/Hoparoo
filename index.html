@@ -86,12 +86,12 @@
   // ======= TWEAK ZONE =======
   const RUN_SPEED = 300;
   const GRAVITY = 2200;
-  const JUMP_VELOCITY = -900;
+  const JUMP_VELOCITY = -700; // Lower jumps for a chill vibe
   const GROUND_RATIO = 0.78;
-  const FADE_W = 64; // For smooth tree tiling blends
+  const FADE_W = 128; // Boosted fade for smoother tree blending—no more awkward seams!
 
   // Player size (logical hitbox), image will be scaled to this
-  const ROO = { w: 64, h: 46 };
+  const ROO = { w: 96, h: 69 }; // Bigger kangaroo for that star power!
 
   // Optional fine-tune for sprite draw relative to the hitbox
   // === Player sprite ===
@@ -107,7 +107,7 @@
   // Remove black from trees.png
   const BG_CHROMA       = [0,0,0];
   const BG_CHROMA_TOL   = 34;                // raised for smoother edges
-  const BG_MIRROR_TILING = false;            // disabled for blend mode
+  const BG_MIRROR_TILING = true;             // Enabled for variety and better seam hiding
 
   const BOB = { amp: 24, freq: 5.5 }; // boosted for more hop-like animation
   const SPAWN_GAP = { min: 380, max: 720 };
@@ -123,6 +123,8 @@
     { name: 'emu',    w: 28, h: 62 },
     { name: 'roo',    w: 52, h: 42 },
   ];
+
+  const BOUNCE_DAMPING = 0.7; // For fun bounces on collision
 
   // Parallax backgrounds (images optional; realistic fallback built-in)
   // ======= /TWEAK ZONE =======
@@ -363,7 +365,20 @@
         w: ROO.w * shrink,
         h: ROO.h * shrink
       };
-      for (const o of obstacles) { if (rectsOverlap(rb, o)) { gameOver(); break; } }
+      let collided = false;
+      for (const o of obstacles) {
+        if (rectsOverlap(rb, o)) {
+          collided = true;
+          // Bounce instead of game over!
+          roo.vy *= -BOUNCE_DAMPING; // Reverse velocity with some damping for bounce
+          roo.y += roo.vy * dt; // Apply immediate bounce adjustment
+          roo.grounded = false;
+          break; // Only bounce off one at a time
+        }
+      }
+      if (collided) {
+        // Optional: Add a little sound or effect if you want later!
+      }
     }
   }
 
