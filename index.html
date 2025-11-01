@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
@@ -92,9 +93,20 @@
   const ROO = { w: 64, h: 46 };
 
   // Optional fine-tune for sprite draw relative to the hitbox
-  const ROO_IMG_URL   = ''; // <- paste RAW URL to Kangaroo.png here
-  const ROO_IMG_OFFSET = { x: 0, y: 0 };   // nudge if feet/head need aligning
-  const ROO_IMG_TILT   = { up:-0.18, down:0.22, max:0.28 }; // radians when ascending/descending
+  // === Player sprite ===
+  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/Kangaroo.png?v=1';          // <- paste actual RAW
+  const ROO_IMG_OFFSET = { x: 0, y: 0 };     // tweak feet alignment (+y = lower)
+  const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 }; // radians
+
+  // === Trees / parallax ===
+  const BG_FRONT_URL = 'https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/trees.png?v=1';          // foreground treeline
+  const BG_BACK_URL  = '';                   // leave blank to auto-derive back layer
+  const BG_SCROLL = { back: 0.22, front: 0.55 };
+
+  // Remove black from trees.png
+  const BG_CHROMA       = [0,0,0];
+  const BG_CHROMA_TOL   = 28;                // raise to ~34 if a dark fringe remains
+  const BG_MIRROR_TILING = true;             // mirror tiles to hide seams
 
   const BOB = { amp: 6, freq: 6.5 };
   const SPAWN_GAP = { min: 380, max: 720 };
@@ -112,9 +124,6 @@
   ];
 
   // Parallax backgrounds (images optional; realistic fallback built-in)
-  const BG_BACK_URL  = ''; // e.g. raw trees_back.png
-  const BG_FRONT_URL = ''; // e.g. raw trees_front.png
-  const BG_SCROLL = { back: 0.25, front: 0.55 };
   // ======= /TWEAK ZONE =======
 
   // DOM refs
@@ -140,10 +149,10 @@
   let W = 0, H = 0, GROUND_Y = 0;
 
   // Player sprite
-  let rooImg = null, rooImgLoaded = false;
+  let rooImg=null, rooImgLoaded=false;
+  let bgBackImg=null, bgFrontImg=null, bgBackLoaded=false, bgFrontLoaded=false;
 
   // Parallax state
-  let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
   let bgBackX = 0, bgFrontX = 0;
   let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
   let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
@@ -159,20 +168,24 @@
   };
 
   // Load assets
-  function loadImages() {
-    if (ROO_IMG_URL) {
-      rooImg = new Image();
-      rooImg.crossOrigin = 'anonymous';
-      rooImg.src = ROO_IMG_URL;
-      rooImg.onload = () => (rooImgLoaded = true);
+  async function loadImages(){
+    // Player
+    if (ROO_IMG_URL){
+      rooImg = await loadImage(ROO_IMG_URL);
+      rooImgLoaded = true;
+    }
+
+    // Trees with one-time chroma-key
+    if (BG_FRONT_URL) {
+      bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
+      bgFrontLoaded = true;
     }
     if (BG_BACK_URL) {
-      bgBackImg = new Image(); bgBackImg.crossOrigin = 'anonymous';
-      bgBackImg.src = BG_BACK_URL; bgBackImg.onload = () => (bgBackLoaded = true);
-    }
-    if (BG_FRONT_URL) {
-      bgFrontImg = new Image(); bgFrontImg.crossOrigin = 'anonymous';
-      bgFrontImg.src = BG_FRONT_URL; bgFrontImg.onload = () => (bgFrontLoaded = true);
+      bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
+      bgBackLoaded = true;
+    } else if (bgFrontImg) {
+      bgBackImg = makeVariant(bgFrontImg, 0.96, 0.88); // lighter, less saturated
+      bgBackLoaded = true;
     }
   }
   loadImages();
@@ -378,42 +391,31 @@
     }
   }
 
-  function drawRoo() {
+  function drawRoo(){
     const bobOffset = (roo.grounded ? Math.sin(roo.bobT) * BOB.amp : 0);
     const x = roo.x, y = roo.y + bobOffset;
 
-    // Ground shadow
+    // shadow
     ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.filter = 'blur(1px)';
-    ctx.beginPath();
-    ctx.ellipse(x + ROO.w * 0.5, GROUND_Y - 2, ROO.w * 0.42, 3, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fill();
-    ctx.restore();
+    ctx.globalAlpha = 0.28; ctx.filter='blur(1px)';
+    ctx.beginPath(); ctx.ellipse(x + ROO.w*0.5, GROUND_Y - 2, ROO.w*0.42, 3, 0, 0, Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fill(); ctx.restore();
 
-    if (rooImgLoaded && rooImg) {
-      const tilt = !roo.grounded
-        ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down)
-        : 0;
-
+    if (rooImgLoaded && rooImg){
+      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : 0;
       ctx.save();
-      const cx = x + ROO.w / 2, cy = y + ROO.h / 2;
+      const cx = x + ROO.w/2, cy = y + ROO.h/2;
       ctx.translate(cx, cy);
       ctx.rotate(clamp(tilt, -ROO_IMG_TILT.max, ROO_IMG_TILT.max));
-      ctx.drawImage(
-        rooImg,
-        -ROO.w / 2 + ROO_IMG_OFFSET.x,
-        -ROO.h / 2 + ROO_IMG_OFFSET.y,
-        ROO.w, ROO.h
-      );
+      ctx.drawImage(rooImg, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
       ctx.restore();
     } else {
-      // Fallback: simple blocky roo
-      ctx.fillStyle = KANGAROO_COLOR; roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
-      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18); // head
-      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);  // ear
-      ctx.fillRect(x - 14, y + 12, 14, 6);          // tail
+      // fallback blocky roo
+      ctx.fillStyle = '#22c55e';
+      roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
+      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18);
+      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);
+      ctx.fillRect(x - 14, y + 12, 14, 6);
     }
   }
 
@@ -430,28 +432,59 @@
     ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
   }
 
-  // Parallax bands (image or procedural)
-  function drawParallaxBand({ img, loaded, xOffset, y, h, layer }) {
-    if (loaded && img && img.width && img.height) {
-      const scale = h / img.height;
-      const tileW = img.width * scale;
-      let x = -((xOffset % tileW) + tileW);
-      for (; x < W + tileW; x += tileW) ctx.drawImage(img, x, y, tileW, h);
-      return;
+  function loadImage(url){
+    return new Promise((res, rej)=>{
+      const im = new Image(); im.crossOrigin='anonymous';
+      im.onload=()=>res(im); im.onerror=rej; im.src=url;
+    });
+  }
+
+  // Chroma-key near-black pixels to transparent
+  async function loadStripWithChroma(url, keyRGB, tol){
+    const img = await loadImage(url);
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d', { willReadFrequently:true });
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0,0,c.width,c.height), a = d.data;
+    const [kr,kg,kb] = keyRGB;
+    for (let i=0;i<a.length;i+=4){
+      const r=a[i], gg=a[i+1], b=a[i+2];
+      if (Math.abs(r-kr)<tol && Math.abs(gg-kg)<tol && Math.abs(b-kb)<tol) a[i+3]=0;
     }
-    const band = layer === 'back' ? bandBack : bandFront;
-    const tileW = layer === 'back' ? bandBackW : bandFrontW;
-    if (!band || !tileW) return;
+    g.putImageData(d,0,0);
+    return c; // canvas usable by drawImage
+  }
 
-    if (layer === 'back') ctx.filter = 'blur(1px)';
+  function makeVariant(srcCanvas, brightness=1, saturation=1){
+    const c = document.createElement('canvas'); c.width=srcCanvas.width; c.height=srcCanvas.height;
+    const g = c.getContext('2d'); g.filter=`brightness(${brightness}) saturate(${saturation})`;
+    g.drawImage(srcCanvas,0,0); return c;
+  }
+
+  // Parallax bands (image or procedural)
+  function drawParallaxBand({ img, loaded, xOffset, y, h, layer }){
+    // prefer image/canvas; else use existing procedural band if present
+    const src = (loaded && img && (img.width || img.naturalWidth))
+      ? img
+      : (layer==='back' ? bandBack : bandFront);
+    if (!src) return;
+
+    const scale = h / src.height;
+    const tileW = src.width * scale;
+    const blurBack = (layer==='back' && !BG_BACK_URL); // only blur if reusing front
     let x = -((xOffset % tileW) + tileW);
-    for (; x < W + tileW; x += tileW) ctx.drawImage(band, x, y, tileW, h);
-    ctx.filter = 'none';
 
-    const haze = ctx.createLinearGradient(0, y, 0, y + h);
-    haze.addColorStop(0, layer === 'back' ? PALETTE_BACK.haze : PALETTE_FRONT.haze);
-    haze.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = haze; ctx.fillRect(0, y, W, h * 0.7);
+    for (let i=0; x < W + tileW; i++, x += tileW){
+      if (blurBack){ ctx.filter='blur(1px) saturate(0.9)'; ctx.globalAlpha=0.95; }
+      if (BG_MIRROR_TILING && (i % 2)){
+        ctx.save(); ctx.scale(-1,1);
+        ctx.drawImage(src, -(x + tileW), y, tileW, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(src, x, y, tileW, h);
+      }
+      if (blurBack){ ctx.filter='none'; ctx.globalAlpha=1; }
+    }
   }
 
   function createTreeBand(h, pal, density = 1.0, distant = false) {
@@ -489,7 +522,7 @@
       gc.save();
       gc.globalAlpha = 0.25;
       gc.filter = 'blur(0.6px)';
-      rounded(gc, baseX - spread * 0.2, h - 4, spread * 1.2, 4, 2); gc.fill();
+      roundedRect(baseX - spread * 0.2, h - 4, spread * 1.2, 4, 2); gc.fill();
       gc.restore();
     }
 
@@ -505,31 +538,23 @@
   }
 
   function paintLeaves(gc, cx, cy, w, h, pal, distant) {
-    gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h, 12); gc.fill();
-    gc.fillStyle = pal.leafMid;  organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78, 14); gc.fill();
+    gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h); gc.fill();
+    gc.fillStyle = pal.leafMid;  organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78); gc.fill();
 
     const hl = gc.createRadialGradient(cx, cy - h*0.25, 10, cx, cy - h*0.25, Math.max(20, w*0.9));
     hl.addColorStop(0, pal.leafLight); hl.addColorStop(1, 'rgba(255,255,255,0)');
-    gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5, 12); gc.fill();
+    gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5); gc.fill();
 
     gc.save();
     gc.globalAlpha = distant ? 0.08 : 0.12;
     for (let i = 0; i < 22; i++) {
       const px = cx + (Math.random() - 0.5) * w * 0.9;
       const py = cy - h*0.2 + (Math.random() - 0.2) * h * 0.7;
-      rounded(gc, px, py, 6 + Math.random()*8, 4 + Math.random()*6, 2); gc.fillStyle = pal.leafLight; gc.fill();
+      roundedRect(px, py, 6 + Math.random()*8, 4 + Math.random()*6, 2); gc.fillStyle = pal.leafLight; gc.fill();
     }
     gc.restore();
   }
 
-  function rounded(gc, x, y, w, h, r) {
-    const rr = Math.min(r, w/2, h/2); gc.beginPath();
-    gc.moveTo(x + rr, y);
-    gc.lineTo(x + w - rr, y); gc.quadraticCurveTo(x + w, y, x + w, y + rr);
-    gc.lineTo(x + w, y + h - rr); gc.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-    gc.lineTo(x + rr, y + h); gc.quadraticCurveTo(x, y + h, x, y + h - rr);
-    gc.lineTo(x, y + rr); gc.quadraticCurveTo(x, y, x + rr, y);
-  }
   function organicBlob(gc, cx, cy, w, h) {
     gc.beginPath();
     gc.moveTo(cx - w/2, cy);
