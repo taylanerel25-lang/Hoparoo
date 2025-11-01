@@ -87,15 +87,23 @@
   const GRAVITY = 2200;
   const JUMP_VELOCITY = -900;
   const GROUND_RATIO = 0.78;
+
+  // Player size (logical hitbox), image will be scaled to this
   const ROO = { w: 64, h: 46 };
+
+  // Optional fine-tune for sprite draw relative to the hitbox
+  const ROO_IMG_URL   = ''; // <- paste RAW URL to Kangaroo.png here
+  const ROO_IMG_OFFSET = { x: 0, y: 0 };   // nudge if feet/head need aligning
+  const ROO_IMG_TILT   = { up:-0.18, down:0.22, max:0.28 }; // radians when ascending/descending
+
   const BOB = { amp: 6, freq: 6.5 };
   const SPAWN_GAP = { min: 380, max: 720 };
   const SAFE_START_MS = 1200;
 
-  // Sky + ground palette
   const SKY = ['#78c6ff', '#d9f0ff'];
   const GROUND_COLOR = '#2e3a45';
-  const KANGAROO_COLOR = '#22c55e';
+  const KANGAROO_COLOR = '#22c55e'; // fallback if image missing
+
   const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa'];
   const OBSTACLE_TYPES = [
     { name: 'rock',   w: 38, h: 34 },
@@ -103,9 +111,9 @@
     { name: 'roo',    w: 52, h: 42 },
   ];
 
-  // Use your own images if provided (RAW URLs)
-  const BG_BACK_URL  = ''; // e.g. 'https://raw.githubusercontent.com/USER/REPO/branch/assets/trees_back.png?v=1'
-  const BG_FRONT_URL = ''; // e.g. 'https://raw.githubusercontent.com/USER/REPO/branch/assets/trees_front.png?v=1'
+  // Parallax backgrounds (images optional; realistic fallback built-in)
+  const BG_BACK_URL  = ''; // e.g. raw trees_back.png
+  const BG_FRONT_URL = ''; // e.g. raw trees_front.png
   const BG_SCROLL = { back: 0.25, front: 0.55 };
   // ======= /TWEAK ZONE =======
 
@@ -124,19 +132,20 @@
   const bestHud = document.getElementById('bestHud');
   const toast = document.getElementById('toast');
 
+  // Canvas
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-  // Layout
   let W = 0, H = 0, GROUND_Y = 0;
 
-  // Background assets + caches
+  // Player sprite
+  let rooImg = null, rooImgLoaded = false;
+
+  // Parallax state
   let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
   let bgBackX = 0, bgFrontX = 0;
   let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
-
-  // Procedural band caches (for realistic fallback)
   let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
 
   // Palettes for procedural trees
@@ -149,7 +158,14 @@
     trunkLight: '#6c543b', trunkDark: '#4a3824', haze: 'rgba(255,255,255,0.05)'
   };
 
-  function loadBG() {
+  // Load assets
+  function loadImages() {
+    if (ROO_IMG_URL) {
+      rooImg = new Image();
+      rooImg.crossOrigin = 'anonymous';
+      rooImg.src = ROO_IMG_URL;
+      rooImg.onload = () => (rooImgLoaded = true);
+    }
     if (BG_BACK_URL) {
       bgBackImg = new Image(); bgBackImg.crossOrigin = 'anonymous';
       bgBackImg.src = BG_BACK_URL; bgBackImg.onload = () => (bgBackLoaded = true);
@@ -159,7 +175,7 @@
       bgFrontImg.src = BG_FRONT_URL; bgFrontImg.onload = () => (bgFrontLoaded = true);
     }
   }
-  loadBG();
+  loadImages();
 
   function resize() {
     W = Math.floor(window.innerWidth);
@@ -174,21 +190,14 @@
     backY   = GROUND_Y - BACK_H;
     frontY  = GROUND_Y - FRONT_H;
 
-    buildBands(); // rebuild procedural art on size changes
+    buildBands();
   }
   window.addEventListener('resize', resize, { passive: true });
   resize();
 
-  // Build procedural bands if images aren't provided
   function buildBands() {
-    if (!BG_BACK_URL) {
-      const band = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true);
-      bandBack = band.canvas; bandBackW = band.w;
-    }
-    if (!BG_FRONT_URL) {
-      const band = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false);
-      bandFront = band.canvas; bandFrontW = band.w;
-    }
+    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true); bandBack = b.canvas; bandBackW = b.w; }
+    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false); bandFront = f.canvas; bandFrontW = f.w; }
   }
 
   // Game state
@@ -204,7 +213,7 @@
   };
   bestHud.textContent = `Best: ${state.best}`;
 
-  // Roo (player)
+  // Roo
   const roo = { x: Math.max(80, W * 0.18), y: 0, vy: 0, grounded: true, bobT: 0 };
   function placeRooOnGround() { roo.y = GROUND_Y - ROO.h; roo.vy = 0; roo.grounded = true; }
   placeRooOnGround();
@@ -229,7 +238,6 @@
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); }
     if (state.dead && (e.code === 'Space' || e.code === 'Enter')) doPlayAgain();
   });
-
   document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
 
   function startGame() {
@@ -265,10 +273,7 @@
   againBtn.addEventListener('click', doPlayAgain);
   shareBtn.addEventListener('click', async () => {
     const text = `I scored ${Math.floor(state.score)} in Hoparoo!`;
-    try {
-      if (navigator.share) await navigator.share({ text, title: 'Hoparoo' });
-      else { await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); }
-    } catch {}
+    try { if (navigator.share) await navigator.share({ text, title: 'Hoparoo' }); else { await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); } } catch {}
   });
 
   function showToast(msg){ toast.textContent = msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=> toast.classList.remove('show'), 1200); }
@@ -282,7 +287,7 @@
   requestAnimationFrame(loop);
 
   function update(dt) {
-    // Parallax scroll (subtle motion even on splash)
+    // Parallax motion
     bgBackX  += RUN_SPEED * BG_SCROLL.back  * dt;
     bgFrontX += RUN_SPEED * BG_SCROLL.front * dt;
 
@@ -311,7 +316,14 @@
       } else {
         roo.bobT += dt * BOB.freq;
       }
-      const rb = { x: roo.x, y: roo.y, w: ROO.w, h: ROO.h };
+      // Slightly forgiving hitbox
+      const shrink = 0.86;
+      const rb = {
+        x: roo.x + (ROO.w * (1 - shrink)) / 2,
+        y: roo.y + (ROO.h * (1 - shrink)) / 2,
+        w: ROO.w * shrink,
+        h: ROO.h * shrink
+      };
       for (const o of obstacles) { if (rectsOverlap(rb, o)) { gameOver(); break; } }
     }
   }
@@ -323,12 +335,12 @@
   }
 
   function drawSky() {
-    // Sky gradient
+    // Blue sky
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-    // Soft clouds
+    // Clouds
     const t = performance.now() * 0.00006;
     ctx.globalAlpha = 0.14;
     for (let i = 0; i < 10; i++) {
@@ -339,13 +351,9 @@
     }
     ctx.globalAlpha = 1;
 
-    // Parallax bands (image if provided, otherwise realistic procedural)
-    drawParallaxBand({
-      img: bgBackImg, loaded: bgBackLoaded, xOffset: bgBackX, y: backY, h: BACK_H, layer: 'back'
-    });
-    drawParallaxBand({
-      img: bgFrontImg, loaded: bgFrontLoaded, xOffset: bgFrontX, y: frontY, h: FRONT_H, layer: 'front'
-    });
+    // Parallax bands
+    drawParallaxBand({ img: bgBackImg, loaded: bgBackLoaded, xOffset: bgBackX, y: backY, h: BACK_H, layer: 'back' });
+    drawParallaxBand({ img: bgFrontImg, loaded: bgFrontLoaded, xOffset: bgFrontX, y: frontY, h: FRONT_H, layer: 'front' });
   }
 
   function drawGround() {
@@ -373,20 +381,45 @@
   function drawRoo() {
     const bobOffset = (roo.grounded ? Math.sin(roo.bobT) * BOB.amp : 0);
     const x = roo.x, y = roo.y + bobOffset;
-    ctx.fillStyle = KANGAROO_COLOR; roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
-    ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18); // head
-    ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);  // ear
-    ctx.fillRect(x - 14, y + 12, 14, 6);          // tail
-    if (roo.grounded) {
-      ctx.globalAlpha = 0.4;
-      ctx.fillRect(x + 6, GROUND_Y - 2, 22, 2);
-      ctx.fillRect(x + ROO.w - 28, GROUND_Y - 2, 22, 2);
-      ctx.globalAlpha = 1;
+
+    // Ground shadow
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.filter = 'blur(1px)';
+    ctx.beginPath();
+    ctx.ellipse(x + ROO.w * 0.5, GROUND_Y - 2, ROO.w * 0.42, 3, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fill();
+    ctx.restore();
+
+    if (rooImgLoaded && rooImg) {
+      const tilt = !roo.grounded
+        ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down)
+        : 0;
+
+      ctx.save();
+      const cx = x + ROO.w / 2, cy = y + ROO.h / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate(clamp(tilt, -ROO_IMG_TILT.max, ROO_IMG_TILT.max));
+      ctx.drawImage(
+        rooImg,
+        -ROO.w / 2 + ROO_IMG_OFFSET.x,
+        -ROO.h / 2 + ROO_IMG_OFFSET.y,
+        ROO.w, ROO.h
+      );
+      ctx.restore();
+    } else {
+      // Fallback: simple blocky roo
+      ctx.fillStyle = KANGAROO_COLOR; roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
+      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18); // head
+      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);  // ear
+      ctx.fillRect(x - 14, y + 12, 14, 6);          // tail
     }
   }
 
   // ===== Utils =====
   function rand(min, max) { return min + Math.random() * (max - min); }
+  function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
   function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
   function roundedRect(x, y, w, h, r) {
     const rr = Math.min(r, w/2, h/2); ctx.beginPath();
@@ -397,9 +430,8 @@
     ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
   }
 
-  // ===== Procedural realistic tree bands =====
+  // Parallax bands (image or procedural)
   function drawParallaxBand({ img, loaded, xOffset, y, h, layer }) {
-    // Use image if present
     if (loaded && img && img.width && img.height) {
       const scale = h / img.height;
       const tileW = img.width * scale;
@@ -407,18 +439,15 @@
       for (; x < W + tileW; x += tileW) ctx.drawImage(img, x, y, tileW, h);
       return;
     }
-
-    // Otherwise draw cached procedural band
     const band = layer === 'back' ? bandBack : bandFront;
     const tileW = layer === 'back' ? bandBackW : bandFrontW;
     if (!band || !tileW) return;
 
-    if (layer === 'back') ctx.filter = 'blur(1px)'; // depth blur
+    if (layer === 'back') ctx.filter = 'blur(1px)';
     let x = -((xOffset % tileW) + tileW);
     for (; x < W + tileW; x += tileW) ctx.drawImage(band, x, y, tileW, h);
     ctx.filter = 'none';
 
-    // Atmospheric haze towards horizon
     const haze = ctx.createLinearGradient(0, y, 0, y + h);
     haze.addColorStop(0, layer === 'back' ? PALETTE_BACK.haze : PALETTE_FRONT.haze);
     haze.addColorStop(1, 'rgba(255,255,255,0)');
@@ -426,17 +455,13 @@
   }
 
   function createTreeBand(h, pal, density = 1.0, distant = false) {
-    // Offscreen canvas for a seamless-ish tile
-    const tileW = 1280; // wide enough to hide repeats
-    const c = document.createElement('canvas');
-    c.width = tileW; c.height = h;
+    const tileW = 1280;
+    const c = document.createElement('canvas'); c.width = tileW; c.height = h;
     const gc = c.getContext('2d');
 
-    // Base ridge
     gc.fillStyle = mix(pal.leafDark, '#0b0d10', 0.2);
     gc.fillRect(0, h - 12, tileW, 12);
 
-    // Random but consistent generator
     let seed = (Math.random() * 1e9) | 0;
     const rng = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
 
@@ -448,7 +473,6 @@
       const height = (h * (distant ? 0.35 : 0.55)) + rng() * (h * (distant ? 0.15 : 0.25));
       const baseY = h;
 
-      // Trunk (vertical gradient)
       const gx = baseX + spread * 0.45;
       const gyTop = baseY - height;
       const trunkGrad = gc.createLinearGradient(0, gyTop, 0, baseY);
@@ -457,13 +481,11 @@
       gc.fillStyle = trunkGrad;
       gc.fillRect(gx, gyTop, trunkW, height);
 
-      // Leaf canopy (layered organic blobs)
       const cx = baseX;
       const cy = gyTop + height * (distant ? 0.35 : 0.28);
 
       paintLeaves(gc, cx, cy, spread, height * (distant ? 0.48 : 0.62), pal, distant);
 
-      // Ground shadow
       gc.save();
       gc.globalAlpha = 0.25;
       gc.filter = 'blur(0.6px)';
@@ -471,7 +493,6 @@
       gc.restore();
     }
 
-    // Edge softening to hide seams
     const fadeW = 18;
     const leftGrad = gc.createLinearGradient(0, 0, fadeW, 0);
     leftGrad.addColorStop(0, 'rgba(0,0,0,0)'); leftGrad.addColorStop(1, 'rgba(0,0,0,0.18)');
@@ -484,18 +505,13 @@
   }
 
   function paintLeaves(gc, cx, cy, w, h, pal, distant) {
-    // Layer 1: dark silhouette
     gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h, 12); gc.fill();
+    gc.fillStyle = pal.leafMid;  organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78, 14); gc.fill();
 
-    // Layer 2: mid-tone mass
-    gc.fillStyle = pal.leafMid; organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78, 14); gc.fill();
-
-    // Layer 3: highlights (patchy)
     const hl = gc.createRadialGradient(cx, cy - h*0.25, 10, cx, cy - h*0.25, Math.max(20, w*0.9));
     hl.addColorStop(0, pal.leafLight); hl.addColorStop(1, 'rgba(255,255,255,0)');
     gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5, 12); gc.fill();
 
-    // Speckled texture (leaves clusters)
     gc.save();
     gc.globalAlpha = distant ? 0.08 : 0.12;
     for (let i = 0; i < 22; i++) {
@@ -506,7 +522,6 @@
     gc.restore();
   }
 
-  // Helper: rounded path
   function rounded(gc, x, y, w, h, r) {
     const rr = Math.min(r, w/2, h/2); gc.beginPath();
     gc.moveTo(x + rr, y);
@@ -515,9 +530,7 @@
     gc.lineTo(x + rr, y + h); gc.quadraticCurveTo(x, y + h, x, y + h - rr);
     gc.lineTo(x, y + rr); gc.quadraticCurveTo(x, y, x + rr, y);
   }
-
-  // Helper: organic blob silhouette
-  function organicBlob(gc, cx, cy, w, h, r = 10) {
+  function organicBlob(gc, cx, cy, w, h) {
     gc.beginPath();
     gc.moveTo(cx - w/2, cy);
     gc.bezierCurveTo(cx - w*0.55, cy - h*0.35, cx - w*0.25, cy - h*0.75, cx, cy - h*0.7);
@@ -525,8 +538,6 @@
     gc.bezierCurveTo(cx + w*0.55, cy + h*0.35, cx + w*0.25, cy + h*0.5, cx, cy + h*0.45);
     gc.bezierCurveTo(cx - w*0.25, cy + h*0.5, cx - w*0.55, cy + h*0.35, cx - w/2, cy);
   }
-
-  // Tiny color mixer
   function mix(hex, hex2, t) {
     const a = parseInt(hex.slice(1),16), b = parseInt(hex2.slice(1),16);
     const r = (a>>16)&255, g=(a>>8)&255, bl=a&255;
