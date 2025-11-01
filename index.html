@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -108,7 +109,7 @@
   const BG_CHROMA_TOL   = 34;                // raised for smoother edges
   const BG_MIRROR_TILING = true;             // mirror tiles to hide seams
 
-  const BOB = { amp: 12, freq: 4 }; // adjusted for more hop-like bobbing
+  const BOB = { amp: 24, freq: 5.5 }; // boosted for more hop-like animation
   const SPAWN_GAP = { min: 380, max: 720 };
   const SAFE_START_MS = 1200;
 
@@ -395,7 +396,8 @@
   }
 
   function drawRoo(){
-    const bobOffset = (roo.grounded ? Math.sin(roo.bobT) * BOB.amp : 0);
+    const sinVal = Math.sin(roo.bobT);
+    const bobOffset = (roo.grounded ? -sinVal * BOB.amp : 0);
     const x = roo.x, y = roo.y + bobOffset;
 
     // shadow
@@ -405,16 +407,15 @@
     ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fill(); ctx.restore();
 
     if (rooImgLoaded && rooImg){
-      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : 0;
+      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : (-sinVal * 0.12);
       let scaleX = 1;
       let scaleY = 1;
       if (roo.grounded) {
-        const sinVal = Math.sin(roo.bobT);
-        scaleY = 1 + sinVal * 0.1; // squash when down, stretch when up
-        scaleX = 1 - sinVal * 0.05; // slight width change
+        scaleY = 1 + sinVal * 0.15; // boosted squash/stretch for hop feel
+        scaleX = 1 - sinVal * 0.08;
       } else {
         const stretchFactor = Math.abs(roo.vy) / 500; // normalize based on velocity
-        scaleY = 1 - stretchFactor * 0.15; // squash on fall, stretch on rise? swap if needed
+        scaleY = 1 - stretchFactor * 0.15;
         scaleX = 1 + stretchFactor * 0.05;
         if (roo.vy < 0) { // rising
           scaleY = 1 + stretchFactor * 0.15;
