@@ -8,7 +8,7 @@
     html, body { height: 100%; margin: 0; background:#0b0d10; color:#fff; overflow:hidden; font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans"; }
     canvas { display:block; width:100vw; height:100vh; touch-action:none; }
 
-    /* HUD / Splash inspired by Flipper Fish (no leaderboard, no store) */
+    /* HUD / Splash */
     .hud { position:fixed; inset:0; pointer-events:none; }
     .score { position:fixed; top: calc(env(safe-area-inset-top) + 18px); right: 14px; font-size: 56px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
     .best { position:fixed; top: calc(env(safe-area-inset-top) + 28px); left:14px; font-size:16px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
@@ -25,7 +25,6 @@
     .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.35); z-index:9999; }
     .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
-    /* Light mode support */
     @media (prefers-color-scheme: light) {
       html,body{ background:#f3f5f7; color:#111; }
       .title{color:#111; text-shadow:none;}
@@ -35,7 +34,7 @@
 <body>
   <canvas id="game" aria-label="Hoparoo"></canvas>
 
-  <!-- HUD / Splash UI (DOM overlay) -->
+  <!-- HUD / Splash -->
   <div class="hud" aria-hidden="true">
     <div class="score"><span id="scoreHud">0</span></div>
     <div id="bestHud" class="best">Best: 0</div>
@@ -84,19 +83,17 @@
   'use strict';
 
   // ======= TWEAK ZONE =======
-  const RUN_SPEED = 300;                // world scroll speed (px/s)
-  const GRAVITY = 2200;                 // px/s^2
-  const JUMP_VELOCITY = -900;           // px/s (negative = up)
-  const GROUND_RATIO = 0.78;            // ground baseline (fraction of screen height)
-  const ROO = { w: 64, h: 46 };         // kangaroo hitbox
-  const BOB = { amp: 6, freq: 6.5 };    // tiny hop/bob when grounded (visual only)
-  const SPAWN_GAP = { min: 380, max: 720 }; // distance between obstacles (px)
-  const SAFE_START_MS = 1200;           // no obstacles at the very start
+  const RUN_SPEED = 300;
+  const GRAVITY = 2200;
+  const JUMP_VELOCITY = -900;
+  const GROUND_RATIO = 0.78;
+  const ROO = { w: 64, h: 46 };
+  const BOB = { amp: 6, freq: 6.5 };
+  const SPAWN_GAP = { min: 380, max: 720 };
+  const SAFE_START_MS = 1200;
 
-  // Blue sky gradient
+  // Sky + ground palette
   const SKY = ['#78c6ff', '#d9f0ff'];
-
-  // Ground / colors
   const GROUND_COLOR = '#2e3a45';
   const KANGAROO_COLOR = '#22c55e';
   const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa'];
@@ -106,13 +103,13 @@
     { name: 'roo',    w: 52, h: 42 },
   ];
 
-  // Background assets (paste your GitHub RAW links here)
+  // Use your own images if provided (RAW URLs)
   const BG_BACK_URL  = ''; // e.g. 'https://raw.githubusercontent.com/USER/REPO/branch/assets/trees_back.png?v=1'
   const BG_FRONT_URL = ''; // e.g. 'https://raw.githubusercontent.com/USER/REPO/branch/assets/trees_front.png?v=1'
-  const BG_SCROLL = { back: 0.25, front: 0.55 }; // parallax speed fractions
+  const BG_SCROLL = { back: 0.25, front: 0.55 };
   // ======= /TWEAK ZONE =======
 
-  // DOM refs (Flipper-style overlays)
+  // DOM refs
   const splashEl = document.getElementById('splash');
   const startBtn = document.getElementById('startBtn');
   const howToBtn = document.getElementById('howToBtn');
@@ -131,26 +128,35 @@
   const ctx = canvas.getContext('2d');
   let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-  // Canvas / layout
+  // Layout
   let W = 0, H = 0, GROUND_Y = 0;
 
-  // Parallax state
+  // Background assets + caches
   let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
   let bgBackX = 0, bgFrontX = 0;
   let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
 
+  // Procedural band caches (for realistic fallback)
+  let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
+
+  // Palettes for procedural trees
+  const PALETTE_BACK = {
+    leafLight: '#8fbf9a', leafMid: '#78aa87', leafDark: '#5f8f6c',
+    trunkLight: '#7e6a48', trunkDark: '#5a4732', haze: 'rgba(255,255,255,0.10)'
+  };
+  const PALETTE_FRONT = {
+    leafLight: '#3f7f52', leafMid: '#2f6a41', leafDark: '#1f4a2c',
+    trunkLight: '#6c543b', trunkDark: '#4a3824', haze: 'rgba(255,255,255,0.05)'
+  };
+
   function loadBG() {
     if (BG_BACK_URL) {
-      bgBackImg = new Image();
-      bgBackImg.crossOrigin = 'anonymous';
-      bgBackImg.src = BG_BACK_URL;
-      bgBackImg.onload = () => (bgBackLoaded = true);
+      bgBackImg = new Image(); bgBackImg.crossOrigin = 'anonymous';
+      bgBackImg.src = BG_BACK_URL; bgBackImg.onload = () => (bgBackLoaded = true);
     }
     if (BG_FRONT_URL) {
-      bgFrontImg = new Image();
-      bgFrontImg.crossOrigin = 'anonymous';
-      bgFrontImg.src = BG_FRONT_URL;
-      bgFrontImg.onload = () => (bgFrontLoaded = true);
+      bgFrontImg = new Image(); bgFrontImg.crossOrigin = 'anonymous';
+      bgFrontImg.src = BG_FRONT_URL; bgFrontImg.onload = () => (bgFrontLoaded = true);
     }
   }
   loadBG();
@@ -163,14 +169,27 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
 
-    // background layer sizing anchored to ground
     BACK_H  = Math.floor(H * 0.42);
     FRONT_H = Math.floor(H * 0.56);
     backY   = GROUND_Y - BACK_H;
     frontY  = GROUND_Y - FRONT_H;
+
+    buildBands(); // rebuild procedural art on size changes
   }
   window.addEventListener('resize', resize, { passive: true });
   resize();
+
+  // Build procedural bands if images aren't provided
+  function buildBands() {
+    if (!BG_BACK_URL) {
+      const band = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true);
+      bandBack = band.canvas; bandBackW = band.w;
+    }
+    if (!BG_FRONT_URL) {
+      const band = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false);
+      bandFront = band.canvas; bandFrontW = band.w;
+    }
+  }
 
   // Game state
   const state = {
@@ -234,7 +253,6 @@
 
   function doPlayAgain(){
     gameOverEl.style.display = 'none';
-    // Return to splash so user taps to start
     splashEl.style.display = '';
     state.dead = false; state.playing = false; state.score = 0;
     obstacles.length = 0; placeRooOnGround(); hudScore.textContent = '0';
@@ -310,7 +328,7 @@
     g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-    // Lightweight clouds
+    // Soft clouds
     const t = performance.now() * 0.00006;
     ctx.globalAlpha = 0.14;
     for (let i = 0; i < 10; i++) {
@@ -321,17 +339,12 @@
     }
     ctx.globalAlpha = 1;
 
-    // Parallax bands
+    // Parallax bands (image if provided, otherwise realistic procedural)
     drawParallaxBand({
-      img: bgBackImg, loaded: bgBackLoaded,
-      xOffset: bgBackX, y: backY, h: BACK_H, speedFrac: BG_SCROLL.back,
-      fallbackColor: '#4b6b4b', detailColor: '#2f4a2f', density: 0.6
+      img: bgBackImg, loaded: bgBackLoaded, xOffset: bgBackX, y: backY, h: BACK_H, layer: 'back'
     });
-
     drawParallaxBand({
-      img: bgFrontImg, loaded: bgFrontLoaded,
-      xOffset: bgFrontX, y: frontY, h: FRONT_H, speedFrac: BG_SCROLL.front,
-      fallbackColor: '#2f4a2f', detailColor: '#1e331e', density: 0.9
+      img: bgFrontImg, loaded: bgFrontLoaded, xOffset: bgFrontX, y: frontY, h: FRONT_H, layer: 'front'
     });
   }
 
@@ -375,7 +388,6 @@
   // ===== Utils =====
   function rand(min, max) { return min + Math.random() * (max - min); }
   function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
-
   function roundedRect(x, y, w, h, r) {
     const rr = Math.min(r, w/2, h/2); ctx.beginPath();
     ctx.moveTo(x + rr, y);
@@ -385,38 +397,142 @@
     ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
   }
 
-  // Draw and tile an image parallax band; fallback to tree silhouettes
-  function drawParallaxBand({ img, loaded, xOffset, y, h, fallbackColor, detailColor, density }) {
+  // ===== Procedural realistic tree bands =====
+  function drawParallaxBand({ img, loaded, xOffset, y, h, layer }) {
+    // Use image if present
     if (loaded && img && img.width && img.height) {
       const scale = h / img.height;
       const tileW = img.width * scale;
       let x = -((xOffset % tileW) + tileW);
-      for (; x < W + tileW; x += tileW) {
-        ctx.drawImage(img, x, y, tileW, h);
-      }
-    } else {
-      // Fallback: simple repeating tree silhouettes
-      ctx.fillStyle = fallbackColor;
-      ctx.fillRect(0, y + h - 12, W, 12); // small ridge
-      const base = Math.max(48, h * 0.25);
-      let rng = (n) => { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; return (n >>> 0) / 4294967296; };
-      const seed = (Math.floor(performance.now() * 0.05) | 0);
-      const step = 36;
-      for (let i = -40; i < Math.ceil(W / step) + 40; i++) {
-        const r = rng(i * 73856093 ^ seed);
-        const w = 14 + (r * 22);
-        const hh = base + r * (h * 0.55);
-        const xx = (i * step) - ((xOffset * 0.3) % step);
-        // trunk
-        ctx.fillStyle = detailColor;
-        ctx.fillRect(xx + w * 0.45, y + h - hh, w * 0.1, hh);
-        // canopy (three stacked blobs)
-        ctx.fillStyle = fallbackColor;
-        roundedRect(xx, y + h - hh - 10, w, hh * 0.55, 6); ctx.fill();
-        roundedRect(xx - 6, y + h - hh * 0.7, w + 12, hh * 0.45, 8); ctx.fill();
-        roundedRect(xx - 12, y + h - hh * 0.5, w + 24, hh * 0.35, 10); ctx.fill();
-      }
+      for (; x < W + tileW; x += tileW) ctx.drawImage(img, x, y, tileW, h);
+      return;
     }
+
+    // Otherwise draw cached procedural band
+    const band = layer === 'back' ? bandBack : bandFront;
+    const tileW = layer === 'back' ? bandBackW : bandFrontW;
+    if (!band || !tileW) return;
+
+    if (layer === 'back') ctx.filter = 'blur(1px)'; // depth blur
+    let x = -((xOffset % tileW) + tileW);
+    for (; x < W + tileW; x += tileW) ctx.drawImage(band, x, y, tileW, h);
+    ctx.filter = 'none';
+
+    // Atmospheric haze towards horizon
+    const haze = ctx.createLinearGradient(0, y, 0, y + h);
+    haze.addColorStop(0, layer === 'back' ? PALETTE_BACK.haze : PALETTE_FRONT.haze);
+    haze.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = haze; ctx.fillRect(0, y, W, h * 0.7);
+  }
+
+  function createTreeBand(h, pal, density = 1.0, distant = false) {
+    // Offscreen canvas for a seamless-ish tile
+    const tileW = 1280; // wide enough to hide repeats
+    const c = document.createElement('canvas');
+    c.width = tileW; c.height = h;
+    const gc = c.getContext('2d');
+
+    // Base ridge
+    gc.fillStyle = mix(pal.leafDark, '#0b0d10', 0.2);
+    gc.fillRect(0, h - 12, tileW, 12);
+
+    // Random but consistent generator
+    let seed = (Math.random() * 1e9) | 0;
+    const rng = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
+
+    const count = Math.floor((tileW / 36) * density);
+    for (let i = 0; i < count; i++) {
+      const baseX = (i * (tileW / count)) + rng() * 18;
+      const spread = 18 + rng() * 28;
+      const trunkW = 6 + rng() * 5;
+      const height = (h * (distant ? 0.35 : 0.55)) + rng() * (h * (distant ? 0.15 : 0.25));
+      const baseY = h;
+
+      // Trunk (vertical gradient)
+      const gx = baseX + spread * 0.45;
+      const gyTop = baseY - height;
+      const trunkGrad = gc.createLinearGradient(0, gyTop, 0, baseY);
+      trunkGrad.addColorStop(0, pal.trunkLight);
+      trunkGrad.addColorStop(1, pal.trunkDark);
+      gc.fillStyle = trunkGrad;
+      gc.fillRect(gx, gyTop, trunkW, height);
+
+      // Leaf canopy (layered organic blobs)
+      const cx = baseX;
+      const cy = gyTop + height * (distant ? 0.35 : 0.28);
+
+      paintLeaves(gc, cx, cy, spread, height * (distant ? 0.48 : 0.62), pal, distant);
+
+      // Ground shadow
+      gc.save();
+      gc.globalAlpha = 0.25;
+      gc.filter = 'blur(0.6px)';
+      rounded(gc, baseX - spread * 0.2, h - 4, spread * 1.2, 4, 2); gc.fill();
+      gc.restore();
+    }
+
+    // Edge softening to hide seams
+    const fadeW = 18;
+    const leftGrad = gc.createLinearGradient(0, 0, fadeW, 0);
+    leftGrad.addColorStop(0, 'rgba(0,0,0,0)'); leftGrad.addColorStop(1, 'rgba(0,0,0,0.18)');
+    gc.fillStyle = leftGrad; gc.fillRect(0, 0, fadeW, h);
+    const rightGrad = gc.createLinearGradient(tileW - fadeW, 0, tileW, 0);
+    rightGrad.addColorStop(0, 'rgba(0,0,0,0.18)'); rightGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    gc.fillStyle = rightGrad; gc.fillRect(tileW - fadeW, 0, fadeW, h);
+
+    return { canvas: c, w: tileW, h };
+  }
+
+  function paintLeaves(gc, cx, cy, w, h, pal, distant) {
+    // Layer 1: dark silhouette
+    gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h, 12); gc.fill();
+
+    // Layer 2: mid-tone mass
+    gc.fillStyle = pal.leafMid; organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78, 14); gc.fill();
+
+    // Layer 3: highlights (patchy)
+    const hl = gc.createRadialGradient(cx, cy - h*0.25, 10, cx, cy - h*0.25, Math.max(20, w*0.9));
+    hl.addColorStop(0, pal.leafLight); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5, 12); gc.fill();
+
+    // Speckled texture (leaves clusters)
+    gc.save();
+    gc.globalAlpha = distant ? 0.08 : 0.12;
+    for (let i = 0; i < 22; i++) {
+      const px = cx + (Math.random() - 0.5) * w * 0.9;
+      const py = cy - h*0.2 + (Math.random() - 0.2) * h * 0.7;
+      rounded(gc, px, py, 6 + Math.random()*8, 4 + Math.random()*6, 2); gc.fillStyle = pal.leafLight; gc.fill();
+    }
+    gc.restore();
+  }
+
+  // Helper: rounded path
+  function rounded(gc, x, y, w, h, r) {
+    const rr = Math.min(r, w/2, h/2); gc.beginPath();
+    gc.moveTo(x + rr, y);
+    gc.lineTo(x + w - rr, y); gc.quadraticCurveTo(x + w, y, x + w, y + rr);
+    gc.lineTo(x + w, y + h - rr); gc.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    gc.lineTo(x + rr, y + h); gc.quadraticCurveTo(x, y + h, x, y + h - rr);
+    gc.lineTo(x, y + rr); gc.quadraticCurveTo(x, y, x + rr, y);
+  }
+
+  // Helper: organic blob silhouette
+  function organicBlob(gc, cx, cy, w, h, r = 10) {
+    gc.beginPath();
+    gc.moveTo(cx - w/2, cy);
+    gc.bezierCurveTo(cx - w*0.55, cy - h*0.35, cx - w*0.25, cy - h*0.75, cx, cy - h*0.7);
+    gc.bezierCurveTo(cx + w*0.25, cy - h*0.75, cx + w*0.55, cy - h*0.35, cx + w/2, cy);
+    gc.bezierCurveTo(cx + w*0.55, cy + h*0.35, cx + w*0.25, cy + h*0.5, cx, cy + h*0.45);
+    gc.bezierCurveTo(cx - w*0.25, cy + h*0.5, cx - w*0.55, cy + h*0.35, cx - w/2, cy);
+  }
+
+  // Tiny color mixer
+  function mix(hex, hex2, t) {
+    const a = parseInt(hex.slice(1),16), b = parseInt(hex2.slice(1),16);
+    const r = (a>>16)&255, g=(a>>8)&255, bl=a&255;
+    const r2=(b>>16)&255, g2=(b>>8)&255, bl2=b&255;
+    const rr = Math.round(r + (r2-r)*t), gg=Math.round(g+(g2-g)*t), bb=Math.round(bl+(bl2-bl)*t);
+    return `#${((1<<24)+(rr<<16)+(gg<<8)+bb).toString(16).slice(1)}`;
   }
 })();
 </script>
