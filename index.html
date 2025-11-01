@@ -105,10 +105,10 @@
 
   // Remove black from trees.png
   const BG_CHROMA       = [0,0,0];
-  const BG_CHROMA_TOL   = 28;                // raise to ~34 if a dark fringe remains
+  const BG_CHROMA_TOL   = 34;                // raised for smoother edges
   const BG_MIRROR_TILING = true;             // mirror tiles to hide seams
 
-  const BOB = { amp: 6, freq: 6.5 };
+  const BOB = { amp: 12, freq: 4 }; // adjusted for more hop-like bobbing
   const SPAWN_GAP = { min: 380, max: 720 };
   const SAFE_START_MS = 1200;
 
@@ -198,8 +198,8 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
 
-    BACK_H  = Math.floor(H * 0.42);
-    FRONT_H = Math.floor(H * 0.56);
+    BACK_H  = Math.floor(H * 0.35); // lowered
+    FRONT_H = Math.floor(H * 0.5); // lowered a bit
     backY   = GROUND_Y - BACK_H;
     frontY  = GROUND_Y - FRONT_H;
 
@@ -237,7 +237,7 @@
     const t = OBSTACLE_TYPES[(Math.random() * OBSTACLE_TYPES.length) | 0];
     const color = OBSTACLE_COLORS[(Math.random() * OBSTACLE_COLORS.length) | 0];
     const h = t.h; const w = t.w; const y = GROUND_Y - h; const x = W + rand(12, 48);
-    obstacles.push({ x, y, w, h, type: t.name, color });
+    obstacles.push({ x, y, w, h, type: t.name, color, scored: false });
   }
 
   // Input
@@ -264,10 +264,10 @@
 
   function gameOver() {
     state.dead = true; state.playing = false;
-    state.best = Math.max(state.best, Math.floor(state.score));
+    state.best = Math.max(state.best, state.score);
     localStorage.setItem('hoparoo_best', String(state.best));
     bestHud.textContent = `Best: ${state.best}`;
-    scoreNow.textContent = `${Math.floor(state.score)}`;
+    scoreNow.textContent = `${state.score}`;
     bestNow.textContent = `${state.best}`;
     setTimeout(() => { gameOverEl.style.display = ''; }, 150);
   }
@@ -285,7 +285,7 @@
   howToModal.addEventListener('click', (e) => { if (e.target === howToModal) howToModal.style.display = 'none'; });
   againBtn.addEventListener('click', doPlayAgain);
   shareBtn.addEventListener('click', async () => {
-    const text = `I scored ${Math.floor(state.score)} in Hoparoo!`;
+    const text = `I scored ${state.score} in Hoparoo!`;
     try { if (navigator.share) await navigator.share({ text, title: 'Hoparoo' }); else { await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); } } catch {}
   });
 
@@ -304,8 +304,7 @@
     bgBackX  += RUN_SPEED * BG_SCROLL.back  * dt;
     bgFrontX += RUN_SPEED * BG_SCROLL.front * dt;
 
-    if (state.playing) state.score += (RUN_SPEED * dt) * 0.1;
-    hudScore.textContent = `${Math.floor(state.score)}`;
+    hudScore.textContent = `${state.score}`;
 
     if (state.playing && (performance.now() - state.startedAt) > SAFE_START_MS) {
       state.distSinceSpawn += RUN_SPEED * dt;
@@ -320,6 +319,10 @@
       const o = obstacles[i];
       if (state.playing) o.x -= RUN_SPEED * dt;
       if (o.x + o.w < -20) obstacles.splice(i, 1);
+      if (state.playing && o.x + o.w < roo.x && !o.scored) {
+        state.score += 1;
+        o.scored = true;
+      }
     }
 
     if (state.playing) {
@@ -403,9 +406,25 @@
 
     if (rooImgLoaded && rooImg){
       const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : 0;
+      let scaleX = 1;
+      let scaleY = 1;
+      if (roo.grounded) {
+        const sinVal = Math.sin(roo.bobT);
+        scaleY = 1 + sinVal * 0.1; // squash when down, stretch when up
+        scaleX = 1 - sinVal * 0.05; // slight width change
+      } else {
+        const stretchFactor = Math.abs(roo.vy) / 500; // normalize based on velocity
+        scaleY = 1 - stretchFactor * 0.15; // squash on fall, stretch on rise? swap if needed
+        scaleX = 1 + stretchFactor * 0.05;
+        if (roo.vy < 0) { // rising
+          scaleY = 1 + stretchFactor * 0.15;
+          scaleX = 1 - stretchFactor * 0.05;
+        }
+      }
       ctx.save();
       const cx = x + ROO.w/2, cy = y + ROO.h/2;
       ctx.translate(cx, cy);
+      ctx.scale(scaleX, scaleY);
       ctx.rotate(clamp(tilt, -ROO_IMG_TILT.max, ROO_IMG_TILT.max));
       ctx.drawImage(rooImg, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
       ctx.restore();
