@@ -1,4 +1,3 @@
-html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,10 +13,244 @@ html
         canvas {
             display: block;
         }
+        :root {
+            --bg: #f0f0f0;
+            --panel: rgba(255,255,255,.9);
+            --panel-dark: rgba(0,0,0,.65);
+            --text: #1d1d1f;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            background: #111;
+            color: var(--text);
+            font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans";
+            overscroll-behavior: none;
+        }
+        .wrap {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        canvas {
+            background: var(--bg);
+            box-shadow: 0 10px 40px rgba(0,0,0,.35);
+            border-radius: 16px;
+            image-rendering: pixelated;
+            touch-action: none;
+        }
+        .hud {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            letter-spacing: .5px;
+            user-select: none;
+        }
+        .btn {
+            appearance: none;
+            border: 0;
+            background: var(--panel);
+            color: #111;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(0,0,0,.15);
+            cursor: pointer;
+            line-height: 1;
+        }
+        .btn:focus {
+            outline: 3px solid #000;
+            outline-offset: 2px;
+        }
+        .score {
+            position: fixed;
+            top: calc(env(safe-area-inset-top) + 24px);
+            right: 14px;
+            font-size: 56px;
+            color: #fff;
+            text-shadow: 0 2px 0 rgba(0,0,0,.6);
+            pointer-events: none;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .best {
+            position: fixed;
+            top: calc(env(safe-area-inset-top) + 35px);
+            left: 14px;
+            font-size: 16px;
+            color: #fff;
+            text-shadow: 0 2px 0 rgba(0,0,0,.6);
+            pointer-events: none;
+        }
+        .splash {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            color: #000;
+            text-shadow: 0 2px 0 rgba(255,255,255,.5);
+            z-index: 2;
+        }
+        .splash-inner {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: 10%;
+            width: min(92%, 360px);
+            text-align: center;
+            pointer-events: none;
+        }
+        .title {
+            font-size: 36px;
+            margin: 2px 0 8px;
+        }
+        .subtitle {
+            font-size: 18px;
+            opacity: .95;
+        }
+        .panel {
+            min-width: 280px;
+            max-width: 90vw;
+            background: var(--panel);
+            color: #111;
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,.25);
+            pointer-events: auto;
+            transform: translateY(8px);
+        }
+        .panel h2 {
+            margin: 0 0 8px 0;
+            font-size: 22px;
+            text-align: center;
+        }
+        .panel .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 18px;
+            padding: 6px 0;
+        }
+        .panel .actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 12px;
+            justify-items: center;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0,0,0,.08);
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 14px;
+        }
+        .toast {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,.85);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translate(-50%, -6px);
+        }
+        .howto-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            place-items: center;
+            background: rgba(0,0,0,.35);
+            z-index: 9999;
+        }
+        .howto-card {
+            width: min(92%, 400px);
+            background: #fff;
+            color: #111;
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,.35);
+            position: relative;
+            text-align: center;
+        }
+        #closeHowToBtn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--panel-dark);
+            color: #fff;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            font-size: 18px;
+            line-height: 30px;
+            cursor: pointer;
+        }
+        .splash-inner .btn {
+            pointer-events: auto;
+        }
+        .score { z-index: 3; }
+        .splash { z-index: 2; }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
+    <div class="wrap">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+    <div class="hud" aria-hidden="true">
+        <div class="score">
+            <span id="scoreHud">0</span>
+        </div>
+        <div id="bestHud" class="best">Highest: 0</div>
+        <div id="splash" class="splash">
+            <div class="splash-inner">
+                <div class="title" style="color:#000;text-shadow:none;">Hoparoo</div>
+                <div class="subtitle">Tap the screen to start!</div>
+                <button id="howToPlayBtn" class="btn" style="margin-top:10px;">How to Play</button>
+                <div style="margin-top:6px;font-size:14px;opacity:.9">Jump over obstacles. Good luck!</div>
+            </div>
+        </div>
+    </div>
+    <div id="gameOver" class="hud" style="display:none;">
+        <div class="panel" role="dialog" aria-modal="true" aria-labelledby="overTitle">
+            <h2 id="overTitle">Game Over</h2>
+            <div class="row"><span>Your Score</span><strong id="scoreNow">0</strong></div>
+            <div class="row"><span>Highest Score</span><span><strong id="bestNow">0</strong> <span id="medal" class="pill" aria-label="medal" style="display:none;">🥉 Bronze</span></span></div>
+            <div class="actions">
+                <button id="againBtn" class="btn">Play Again</button>
+            </div>
+        </div>
+    </div>
+    <div id="howToModal" class="howto-modal" role="dialog" aria-modal="true">
+        <div class="howto-card">
+            <button id="closeHowToBtn">✕</button>
+            <h3>How to Play</h3>
+            <p style="text-align:left;font-size:15px;margin-top:6px;">
+                • Tap/Click/Space to jump<br>
+                • Avoid the obstacles<br>
+                • Score increases as you pass obstacles<br><br>
+                Have fun hopping!
+            </p>
+        </div>
+    </div>
+    <div id="toast" class="toast" role="status"></div>
     <script>
         // Constants for easy tuning
         const SPEED = 5; // Player and obstacle movement speed (pixels per frame)
@@ -39,9 +272,21 @@ html
         let gameState = 'start'; // 'start', 'playing', 'over'
         let player = { x: 100, y: 0, vy: 0 }; // Player position and y-velocity
         let groundY = 0; // Will be set based on canvas height
-        let obstacles = []; // Array of obstacles {x, width, height}
+        let obstacles = []; // Array of obstacles {x, width, height, scored}
         let lastSpawnX = 0; // Track last obstacle spawn position
         let time = 0; // For hopping animation
+        let score = 0;
+        let bestScore = Number(localStorage.getItem('hoparoo_best') || 0);
+
+        // UI elements
+        const splashEl = document.getElementById('splash');
+        const hudScore = document.getElementById('scoreHud');
+        const overPanel = document.getElementById('gameOver');
+        const scoreNow = document.getElementById('scoreNow');
+        const bestNow = document.getElementById('bestNow');
+        const medalEl = document.getElementById('medal');
+        const toast = document.getElementById('toast');
+        const howToModal = document.getElementById('howToModal');
 
         // Set up canvas to fill screen
         function resizeCanvas() {
@@ -54,7 +299,8 @@ html
         resizeCanvas();
 
         // Input handling (tap/click/space)
-        function handleInput() {
+        function handleInput(e) {
+            if (e && e.type === 'keydown' && e.code !== 'Space') return;
             if (gameState === 'start') {
                 startGame();
             } else if (gameState === 'over') {
@@ -65,9 +311,7 @@ html
         }
         document.addEventListener('click', handleInput);
         document.addEventListener('touchstart', handleInput);
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') handleInput();
-        });
+        document.addEventListener('keydown', handleInput);
 
         // Start the game
         function startGame() {
@@ -77,18 +321,23 @@ html
             player.x = 100;
             player.y = groundY - PLAYER_HEIGHT;
             player.vy = 0;
+            score = 0;
+            hudScore.textContent = '0';
+            splashEl.style.display = 'none';
         }
 
         // Reset after game over
         function resetGame() {
             startGame();
+            overPanel.style.display = 'none';
+            splashEl.style.display = '';
         }
 
         // Spawn a new obstacle
         function spawnObstacle() {
             const gap = Math.random() * (SPAWN_GAP_MAX - SPAWN_GAP_MIN) + SPAWN_GAP_MIN;
             lastSpawnX += gap;
-            obstacles.push({ x: lastSpawnX, width: OBSTACLE_WIDTH, height: OBSTACLE_HEIGHT });
+            obstacles.push({ x: lastSpawnX, width: OBSTACLE_WIDTH, height: OBSTACLE_HEIGHT, scored: false });
         }
 
         // Check collision between player and obstacle
@@ -97,6 +346,56 @@ html
                    player.x < obs.x + obs.width &&
                    player.y + PLAYER_HEIGHT > groundY - obs.height;
         }
+
+        // Show toast
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(() => toast.classList.remove('show'), 1200);
+        }
+
+        // Medal logic
+        const medalFor = (s) => s>=50 ? ['🏆 Platinum', '#e5e4e2'] : s>=30 ? ['🥇 Gold', '#f7c32e'] : s>=20 ? ['🥈 Silver', '#c0c0c0'] : s>=10 ? ['🥉 Bronze', '#cd7f32'] : null;
+
+        // Show game over
+        function showGameOver() {
+            scoreNow.textContent = String(score);
+            if (score > bestScore) {
+                bestScore = score;
+                localStorage.setItem('hoparoo_best', String(bestScore));
+            }
+            bestNow.textContent = String(bestScore);
+            document.getElementById('bestHud').textContent = `Highest: ${bestScore}`;
+            const m = medalFor(bestScore);
+            if (m) {
+                medalEl.style.display = '';
+                medalEl.textContent = m[0];
+            } else {
+                medalEl.style.display = 'none';
+            }
+            overPanel.style.display = '';
+        }
+
+        // Event listeners
+        document.getElementById('againBtn').addEventListener('click', () => {
+            overPanel.style.display = 'none';
+            splashEl.style.display = '';
+            gameState = 'start';
+        });
+        document.getElementById('howToPlayBtn').addEventListener('click', () => {
+            howToModal.style.display = 'grid';
+        });
+        document.getElementById('closeHowToBtn').addEventListener('click', () => {
+            howToModal.style.display = 'none';
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') howToModal.style.display = 'none';
+        });
+        howToModal.addEventListener('click', (e) => {
+            if (e.target.id === 'howToModal') e.currentTarget.style.display = 'none';
+        });
+        document.getElementById('bestHud').textContent = `Highest: ${bestScore}`;
 
         // Game loop
         function gameLoop() {
@@ -141,6 +440,13 @@ html
                     ctx.fillStyle = '#FF0000';
                     ctx.fillRect(obs.x, groundY - obs.height, obs.width, obs.height);
 
+                    // Score when passed
+                    if (!obs.scored && obs.x + obs.width < player.x) {
+                        obs.scored = true;
+                        score += 1;
+                        hudScore.textContent = String(score);
+                    }
+
                     // Remove off-screen obstacles
                     if (obs.x + obs.width < 0) {
                         obstacles.splice(index, 1);
@@ -149,6 +455,7 @@ html
                     // Check collision
                     if (checkCollision(obs)) {
                         gameState = 'over';
+                        showGameOver();
                     }
                 });
 
@@ -156,19 +463,6 @@ html
                 ctx.fillStyle = '#00FF00';
                 ctx.fillRect(player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT);
 
-            } else if (gameState === 'start') {
-                // Start screen
-                ctx.fillStyle = '#000';
-                ctx.font = '30px Arial';
-                ctx.fillText('Hoparoo', canvas.width / 2 - 80, canvas.height / 2 - 50);
-                ctx.fillText('Tap/Click/Space to Start', canvas.width / 2 - 150, canvas.height / 2);
-
-            } else if (gameState === 'over') {
-                // Game over screen
-                ctx.fillStyle = '#000';
-                ctx.font = '30px Arial';
-                ctx.fillText('Game Over', canvas.width / 2 - 100, canvas.height / 2 - 50);
-                ctx.fillText('Tap/Click/Space to Retry', canvas.width / 2 - 180, canvas.height / 2);
             }
 
             requestAnimationFrame(gameLoop);
