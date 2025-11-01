@@ -6,29 +6,37 @@
   <style>
     :root{--accent:#22c55e;--panel:rgba(255,255,255,.92);--ink:#0b0d10}
     html, body { height: 100%; margin: 0; background:#0b0d10; color:#fff; overflow:hidden; font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans"; }
-    canvas { display:block; width:100vw; height:100vh; touch-action:none; }/* HUD / Splash inspired by Flipper Fish (no leaderboard, no store) */
-.hud { position:fixed; inset:0; pointer-events:none; }
-.score { position:fixed; top: calc(env(safe-area-inset-top) + 18px); right: 14px; font-size: 56px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
-.best { position:fixed; top: calc(env(safe-area-inset-top) + 28px); left:14px; font-size:16px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
-.splash { position:fixed; inset:0; z-index:2; display:block; }
-.splash-inner { position:absolute; left:50%; transform:translateX(-50%); top:10%; width:min(92%,360px); text-align:center; }
-.title { font-size: 40px; font-weight: 1000; color:#fff; text-shadow:0 8px 24px rgba(0,0,0,.45); margin:0 0 6px; }
-.subtitle { font-size:16px; opacity:.95 }
-.panel { min-width:280px; max-width:90vw; background:var(--panel); color:#111; border-radius:18px; padding:16px; box-shadow:0 10px 40px rgba(0,0,0,.35); pointer-events:auto; }
-.btn { appearance:none; border:0; background:#fff; color:#111; padding:10px 14px; border-radius:999px; font-weight:800; box-shadow:0 2px 8px rgba(0,0,0,.15); cursor:pointer; line-height:1; }
-.btn:focus{ outline:3px solid #000; outline-offset:2px; }
-.actions { display:grid; gap:10px; margin-top:12px; justify-items:center; }
-.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.85); color: #fff; padding: 8px 12px; border-radius: 10px; font-size: 14px; pointer-events: none; opacity: 0; transition: opacity .25s ease, transform .25s ease; }
-.toast.show { opacity: 1; transform: translate(-50%, -6px); }
-.modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.35); z-index:9999; }
-.sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-/* Light mode support */
-@media (prefers-color-scheme: light) { html,body{ background:#f3f5f7; color:#111; } .title{color:#111; text-shadow:none;} }
+    canvas { display:block; width:100vw; height:100vh; touch-action:none; }
 
+    /* HUD / Splash inspired by Flipper Fish (no leaderboard, no store) */
+    .hud { position:fixed; inset:0; pointer-events:none; }
+    .score { position:fixed; top: calc(env(safe-area-inset-top) + 18px); right: 14px; font-size: 56px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
+    .best { position:fixed; top: calc(env(safe-area-inset-top) + 28px); left:14px; font-size:16px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
+    .splash { position:fixed; inset:0; z-index:2; display:block; }
+    .splash-inner { position:absolute; left:50%; transform:translateX(-50%); top:10%; width:min(92%,360px); text-align:center; }
+    .title { font-size: 40px; font-weight: 1000; color:#fff; text-shadow:0 8px 24px rgba(0,0,0,.45); margin:0 0 6px; }
+    .subtitle { font-size:16px; opacity:.95 }
+    .panel { min-width:280px; max-width:90vw; background:var(--panel); color:#111; border-radius:18px; padding:16px; box-shadow:0 10px 40px rgba(0,0,0,.35); pointer-events:auto; }
+    .btn { appearance:none; border:0; background:#fff; color:#111; padding:10px 14px; border-radius:999px; font-weight:800; box-shadow:0 2px 8px rgba(0,0,0,.15); cursor:pointer; line-height:1; }
+    .btn:focus{ outline:3px solid #000; outline-offset:2px; }
+    .actions { display:grid; gap:10px; margin-top:12px; justify-items:center; }
+    .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.85); color: #fff; padding: 8px 12px; border-radius: 10px; font-size: 14px; pointer-events: none; opacity: 0; transition: opacity .25s ease, transform .25s ease; }
+    .toast.show { opacity: 1; transform: translate(-50%, -6px); }
+    .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.35); z-index:9999; }
+    .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+    /* Light mode support */
+    @media (prefers-color-scheme: light) {
+      html,body{ background:#f3f5f7; color:#111; }
+      .title{color:#111; text-shadow:none;}
+    }
   </style>
 </head>
 <body>
-  <canvas id="game" aria-label="Hoparoo"></canvas>  <!-- HUD / Splash UI (DOM overlay) -->  <div class="hud" aria-hidden="true">
+  <canvas id="game" aria-label="Hoparoo"></canvas>
+
+  <!-- HUD / Splash UI (DOM overlay) -->
+  <div class="hud" aria-hidden="true">
     <div class="score"><span id="scoreHud">0</span></div>
     <div id="bestHud" class="best">Best: 0</div>
     <div id="splash" class="splash">
@@ -41,7 +49,9 @@
         </div>
       </div>
     </div>
-  </div>  <div id="gameOver" class="hud" style="display:none;">
+  </div>
+
+  <div id="gameOver" class="hud" style="display:none;">
     <div class="panel" role="dialog" aria-modal="true" aria-labelledby="overTitle" style="position:absolute; left:50%; top:45%; transform:translate(-50%,-50%);">
       <h2 id="overTitle" style="margin:0 0 8px; text-align:center;">Game Over</h2>
       <div style="display:flex; justify-content:space-between; font-size:18px; padding:6px 0;"><span>Your Score</span><strong id="scoreNow">0</strong></div>
@@ -51,7 +61,9 @@
         <button id="shareBtn" class="btn">Share</button>
       </div>
     </div>
-  </div>  <div id="howToModal" class="modal" role="dialog" aria-modal="true">
+  </div>
+
+  <div id="howToModal" class="modal" role="dialog" aria-modal="true">
     <div class="panel" style="text-align:left;">
       <h3 style="margin:0 0 8px; text-align:center;">How to Play</h3>
       <p style="margin:0; line-height:1.45; font-size:15px;">
@@ -62,8 +74,12 @@
       </p>
       <div class="actions"><button id="closeHowToBtn" class="btn">Close</button></div>
     </div>
-  </div>  <div id="aria" class="sr-only" aria-live="polite"></div>
-  <div id="toast" class="toast" role="status"></div><script>
+  </div>
+
+  <div id="aria" class="sr-only" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status"></div>
+
+<script>
 (() => {
   'use strict';
 
@@ -76,15 +92,24 @@
   const BOB = { amp: 6, freq: 6.5 };    // tiny hop/bob when grounded (visual only)
   const SPAWN_GAP = { min: 380, max: 720 }; // distance between obstacles (px)
   const SAFE_START_MS = 1200;           // no obstacles at the very start
-  const SKY = ['#0b0d10', '#111827'];   // background gradient (dark)
-  const GROUND_COLOR = '#374151';
-  const KANGAROO_COLOR = '#22c55e';     // placeholder color
+
+  // Blue sky gradient
+  const SKY = ['#78c6ff', '#d9f0ff'];
+
+  // Ground / colors
+  const GROUND_COLOR = '#2e3a45';
+  const KANGAROO_COLOR = '#22c55e';
   const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa'];
   const OBSTACLE_TYPES = [
     { name: 'rock',   w: 38, h: 34 },
     { name: 'emu',    w: 28, h: 62 },
     { name: 'roo',    w: 52, h: 42 },
   ];
+
+  // Background assets (paste your GitHub RAW links here)
+  const BG_BACK_URL  = ''; // e.g. 'https://raw.githubusercontent.com/USER/REPO/branch/assets/trees_back.png?v=1'
+  const BG_FRONT_URL = ''; // e.g. 'https://raw.githubusercontent.com/USER/REPO/branch/assets/trees_front.png?v=1'
+  const BG_SCROLL = { back: 0.25, front: 0.55 }; // parallax speed fractions
   // ======= /TWEAK ZONE =======
 
   // DOM refs (Flipper-style overlays)
@@ -106,7 +131,30 @@
   const ctx = canvas.getContext('2d');
   let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
+  // Canvas / layout
   let W = 0, H = 0, GROUND_Y = 0;
+
+  // Parallax state
+  let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
+  let bgBackX = 0, bgFrontX = 0;
+  let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
+
+  function loadBG() {
+    if (BG_BACK_URL) {
+      bgBackImg = new Image();
+      bgBackImg.crossOrigin = 'anonymous';
+      bgBackImg.src = BG_BACK_URL;
+      bgBackImg.onload = () => (bgBackLoaded = true);
+    }
+    if (BG_FRONT_URL) {
+      bgFrontImg = new Image();
+      bgFrontImg.crossOrigin = 'anonymous';
+      bgFrontImg.src = BG_FRONT_URL;
+      bgFrontImg.onload = () => (bgFrontLoaded = true);
+    }
+  }
+  loadBG();
+
   function resize() {
     W = Math.floor(window.innerWidth);
     H = Math.floor(window.innerHeight);
@@ -114,6 +162,12 @@
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
+
+    // background layer sizing anchored to ground
+    BACK_H  = Math.floor(H * 0.42);
+    FRONT_H = Math.floor(H * 0.56);
+    backY   = GROUND_Y - BACK_H;
+    frontY  = GROUND_Y - FRONT_H;
   }
   window.addEventListener('resize', resize, { passive: true });
   resize();
@@ -193,7 +247,10 @@
   againBtn.addEventListener('click', doPlayAgain);
   shareBtn.addEventListener('click', async () => {
     const text = `I scored ${Math.floor(state.score)} in Hoparoo!`;
-    try { if (navigator.share) await navigator.share({ text, title: 'Hoparoo' }); else { await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); } } catch {}
+    try {
+      if (navigator.share) await navigator.share({ text, title: 'Hoparoo' });
+      else { await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); }
+    } catch {}
   });
 
   function showToast(msg){ toast.textContent = msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=> toast.classList.remove('show'), 1200); }
@@ -207,6 +264,10 @@
   requestAnimationFrame(loop);
 
   function update(dt) {
+    // Parallax scroll (subtle motion even on splash)
+    bgBackX  += RUN_SPEED * BG_SCROLL.back  * dt;
+    bgFrontX += RUN_SPEED * BG_SCROLL.front * dt;
+
     if (state.playing) state.score += (RUN_SPEED * dt) * 0.1;
     hudScore.textContent = `${Math.floor(state.score)}`;
 
@@ -219,11 +280,19 @@
       }
     }
 
-    for (let i = obstacles.length - 1; i >= 0; i--) { const o = obstacles[i]; if (state.playing) o.x -= RUN_SPEED * dt; if (o.x + o.w < -20) obstacles.splice(i, 1); }
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const o = obstacles[i];
+      if (state.playing) o.x -= RUN_SPEED * dt;
+      if (o.x + o.w < -20) obstacles.splice(i, 1);
+    }
 
     if (state.playing) {
-      if (!roo.grounded) { roo.vy += GRAVITY * dt; roo.y += roo.vy * dt; if (roo.y >= GROUND_Y - ROO.h) { placeRooOnGround(); } }
-      else { roo.bobT += dt * BOB.freq; }
+      if (!roo.grounded) {
+        roo.vy += GRAVITY * dt; roo.y += roo.vy * dt;
+        if (roo.y >= GROUND_Y - ROO.h) { placeRooOnGround(); }
+      } else {
+        roo.bobT += dt * BOB.freq;
+      }
       const rb = { x: roo.x, y: roo.y, w: ROO.w, h: ROO.h };
       for (const o of obstacles) { if (rectsOverlap(rb, o)) { gameOver(); break; } }
     }
@@ -236,25 +305,58 @@
   }
 
   function drawSky() {
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
+    // Sky gradient
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const t = performance.now() * 0.0001; ctx.globalAlpha = 0.25;
-    for (let i = 0; i < 40; i++) { const x = ((i * 97) % W) - ((t * 50) % W); const y = (i * 67) % (GROUND_Y - 40); ctx.fillStyle = 'white'; ctx.fillRect((x + W) % W, y, 2, 2); }
+
+    // Lightweight clouds
+    const t = performance.now() * 0.00006;
+    ctx.globalAlpha = 0.14;
+    for (let i = 0; i < 10; i++) {
+      const cx = ((i * 311) - (t * 900)) % (W + 220) - 110;
+      const cy = 40 + (i * 53) % (GROUND_Y * 0.6);
+      const rw = 160 + (i % 3) * 60, rh = 40 + (i % 2) * 12;
+      roundedRect(cx, cy, rw, rh, 20); ctx.fillStyle = '#ffffff'; ctx.fill();
+    }
     ctx.globalAlpha = 1;
+
+    // Parallax bands
+    drawParallaxBand({
+      img: bgBackImg, loaded: bgBackLoaded,
+      xOffset: bgBackX, y: backY, h: BACK_H, speedFrac: BG_SCROLL.back,
+      fallbackColor: '#4b6b4b', detailColor: '#2f4a2f', density: 0.6
+    });
+
+    drawParallaxBand({
+      img: bgFrontImg, loaded: bgFrontLoaded,
+      xOffset: bgFrontX, y: frontY, h: FRONT_H, speedFrac: BG_SCROLL.front,
+      fallbackColor: '#2f4a2f', detailColor: '#1e331e', density: 0.9
+    });
   }
+
   function drawGround() {
     ctx.fillStyle = GROUND_COLOR; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    const dashW = 32, dashH = 3, gap = 20; const offset = -((performance.now() * RUN_SPEED * 0.002) % (dashW + gap));
+    const dashW = 32, dashH = 3, gap = 20;
+    const offset = -((performance.now() * RUN_SPEED * 0.002) % (dashW + gap));
     ctx.globalAlpha = 0.35; ctx.fillStyle = '#9ca3af';
     for (let x = offset; x < W + dashW; x += dashW + gap) ctx.fillRect(x, GROUND_Y + 18, dashW, dashH);
     ctx.globalAlpha = 1;
   }
+
   function drawObstacle(o) {
     ctx.fillStyle = o.color;
-    if (o.type === 'emu') { ctx.fillRect(o.x, o.y, o.w, o.h - 12); ctx.fillRect(o.x + o.w - 12, o.y - 8, 12, 12); }
-    else if (o.type === 'roo') { roundedRect(o.x, o.y + 6, o.w, o.h - 6, 8); ctx.fill(); ctx.fillRect(o.x + o.w - 10, o.y - 6, 10, 12); }
-    else { roundedRect(o.x, o.y + 8, o.w, o.h - 8, 6); ctx.fill(); }
+    if (o.type === 'emu') {
+      ctx.fillRect(o.x, o.y, o.w, o.h - 12);
+      ctx.fillRect(o.x + o.w - 12, o.y - 8, 12, 12);
+    } else if (o.type === 'roo') {
+      roundedRect(o.x, o.y + 6, o.w, o.h - 6, 8); ctx.fill();
+      ctx.fillRect(o.x + o.w - 10, o.y - 6, 10, 12);
+    } else {
+      roundedRect(o.x, o.y + 8, o.w, o.h - 8, 6); ctx.fill();
+    }
   }
+
   function drawRoo() {
     const bobOffset = (roo.grounded ? Math.sin(roo.bobT) * BOB.amp : 0);
     const x = roo.x, y = roo.y + bobOffset;
@@ -262,12 +364,18 @@
     ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18); // head
     ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);  // ear
     ctx.fillRect(x - 14, y + 12, 14, 6);          // tail
-    if (roo.grounded) { ctx.globalAlpha = 0.4; ctx.fillRect(x + 6, GROUND_Y - 2, 22, 2); ctx.fillRect(x + ROO.w - 28, GROUND_Y - 2, 22, 2); ctx.globalAlpha = 1; }
+    if (roo.grounded) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(x + 6, GROUND_Y - 2, 22, 2);
+      ctx.fillRect(x + ROO.w - 28, GROUND_Y - 2, 22, 2);
+      ctx.globalAlpha = 1;
+    }
   }
 
   // ===== Utils =====
   function rand(min, max) { return min + Math.random() * (max - min); }
   function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+
   function roundedRect(x, y, w, h, r) {
     const rr = Math.min(r, w/2, h/2); ctx.beginPath();
     ctx.moveTo(x + rr, y);
@@ -276,6 +384,41 @@
     ctx.lineTo(x + rr, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
     ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
   }
+
+  // Draw and tile an image parallax band; fallback to tree silhouettes
+  function drawParallaxBand({ img, loaded, xOffset, y, h, fallbackColor, detailColor, density }) {
+    if (loaded && img && img.width && img.height) {
+      const scale = h / img.height;
+      const tileW = img.width * scale;
+      let x = -((xOffset % tileW) + tileW);
+      for (; x < W + tileW; x += tileW) {
+        ctx.drawImage(img, x, y, tileW, h);
+      }
+    } else {
+      // Fallback: simple repeating tree silhouettes
+      ctx.fillStyle = fallbackColor;
+      ctx.fillRect(0, y + h - 12, W, 12); // small ridge
+      const base = Math.max(48, h * 0.25);
+      let rng = (n) => { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; return (n >>> 0) / 4294967296; };
+      const seed = (Math.floor(performance.now() * 0.05) | 0);
+      const step = 36;
+      for (let i = -40; i < Math.ceil(W / step) + 40; i++) {
+        const r = rng(i * 73856093 ^ seed);
+        const w = 14 + (r * 22);
+        const hh = base + r * (h * 0.55);
+        const xx = (i * step) - ((xOffset * 0.3) % step);
+        // trunk
+        ctx.fillStyle = detailColor;
+        ctx.fillRect(xx + w * 0.45, y + h - hh, w * 0.1, hh);
+        // canopy (three stacked blobs)
+        ctx.fillStyle = fallbackColor;
+        roundedRect(xx, y + h - hh - 10, w, hh * 0.55, 6); ctx.fill();
+        roundedRect(xx - 6, y + h - hh * 0.7, w + 12, hh * 0.45, 8); ctx.fill();
+        roundedRect(xx - 12, y + h - hh * 0.5, w + 24, hh * 0.35, 10); ctx.fill();
+      }
+    }
+  }
 })();
-</script></body>
+</script>
+</body>
 </html>
