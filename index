@@ -1,153 +1,181 @@
-<!DOCTYPE html><html lang="en">
+html
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
-  <title>Kanga-Hop</title>
-  <style>
-    html, body { height: 100%; margin: 0; background:#0b0d10; color:#fff; overflow:hidden; }
-    canvas { display:block; width:100vw; height:100vh; touch-action:none; }
-    /* Optional: system font for overlays */
-    @media (prefers-color-scheme: light) { html,body{ background:#f3f5f7; color:#111; } }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hoparoo</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
 </head>
 <body>
-<canvas id="game"></canvas>
-<script>
-(() => {
-  'use strict';// ======= TWEAK ZONE ======= const RUN_SPEED = 300;                // world scroll speed (px/s) const GRAVITY = 2200;                 // px/s^2 const JUMP_VELOCITY = -900;           // px/s (negative = up) const GROUND_RATIO = 0.78;            // ground baseline (fraction of screen height) const ROO = { w: 64, h: 46 };         // kangaroo hitbox (change later for sprite) const BOB = { amp: 6, freq: 6.5 };    // tiny hop/bob when grounded (visual only) const SPAWN_GAP = { min: 380, max: 720 }; // distance between obstacles (px) const SAFE_START_MS = 1200;           // no obstacles at the very start const SKY = ['#0b0d10', '#111827'];   // background gradient (dark) const GROUND_COLOR = '#374151'; const KANGAROO_COLOR = '#22c55e';     // placeholder color const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa']; // placeholder colors
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        // Constants for easy tuning
+        const SPEED = 5; // Player and obstacle movement speed (pixels per frame)
+        const GRAVITY = 0.5; // Gravity strength
+        const JUMP_FORCE = -12; // Jump velocity (negative for upward)
+        const HOP_AMPLITUDE = 3; // Subtle hop height while grounded
+        const HOP_FREQUENCY = 0.1; // Hop oscillation speed
+        const PLAYER_WIDTH = 40; // Player size
+        const PLAYER_HEIGHT = 50;
+        const OBSTACLE_WIDTH = 20; // Obstacle size
+        const OBSTACLE_HEIGHT = 30;
+        const SPAWN_GAP_MIN = 200; // Min distance between obstacles
+        const SPAWN_GAP_MAX = 400; // Max distance between obstacles
+        const GROUND_HEIGHT = 20; // Ground thickness for drawing
 
-// Placeholder obstacle shapes you can swap later for sprites const OBSTACLE_TYPES = [ { name: 'rock',   w: 38, h: 34 }, { name: 'emu',    w: 28, h: 62 }, { name: 'roo',    w: 52, h: 42 }, ]; // ======= /TWEAK ZONE =======
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let gameState = 'start'; // 'start', 'playing', 'over'
+        let player = { x: 100, y: 0, vy: 0 }; // Player position and y-velocity
+        let groundY = 0; // Will be set based on canvas height
+        let obstacles = []; // Array of obstacles {x, width, height}
+        let lastSpawnX = 0; // Track last obstacle spawn position
+        let time = 0; // For hopping animation
 
-const canvas = document.getElementById('game'); const ctx = canvas.getContext('2d'); let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1)); // keep sane
+        // Set up canvas to fill screen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            groundY = canvas.height - GROUND_HEIGHT;
+            player.y = groundY - PLAYER_HEIGHT; // Reset player to ground
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-let W = 0, H = 0, GROUND_Y = 0; function resize() { W = Math.floor(window.innerWidth); H = Math.floor(window.innerHeight); canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); GROUND_Y = Math.floor(H * GROUND_RATIO); } window.addEventListener('resize', resize, { passive: true }); resize();
+        // Input handling (tap/click/space)
+        function handleInput() {
+            if (gameState === 'start') {
+                startGame();
+            } else if (gameState === 'over') {
+                resetGame();
+            } else if (gameState === 'playing' && player.y >= groundY - PLAYER_HEIGHT) {
+                player.vy = JUMP_FORCE;
+            }
+        }
+        document.addEventListener('click', handleInput);
+        document.addEventListener('touchstart', handleInput);
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') handleInput();
+        });
 
-// Game state const state = { playing: false, dead: false, time: 0, score: 0, best: 0, distSinceSpawn: 0, nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max), startedAt: 0, };
+        // Start the game
+        function startGame() {
+            gameState = 'playing';
+            obstacles = [];
+            lastSpawnX = canvas.width;
+            player.x = 100;
+            player.y = groundY - PLAYER_HEIGHT;
+            player.vy = 0;
+        }
 
-// Roo (player) const roo = { x: Math.max(80, W * 0.18), y: 0,              // top-left y for hitbox vy: 0, grounded: true, bobT: 0, }; function placeRooOnGround() { roo.y = GROUND_Y - ROO.h; roo.vy = 0; roo.grounded = true; } placeRooOnGround();
+        // Reset after game over
+        function resetGame() {
+            startGame();
+        }
 
-// Obstacles /** @type {{x:number,y:number,w:number,h:number,type:string,color:string}[]} */ const obstacles = [];
+        // Spawn a new obstacle
+        function spawnObstacle() {
+            const gap = Math.random() * (SPAWN_GAP_MAX - SPAWN_GAP_MIN) + SPAWN_GAP_MIN;
+            lastSpawnX += gap;
+            obstacles.push({ x: lastSpawnX, width: OBSTACLE_WIDTH, height: OBSTACLE_HEIGHT });
+        }
 
-function spawnObstacle() { const t = OBSTACLE_TYPES[(Math.random() * OBSTACLE_TYPES.length) | 0]; const color = OBSTACLE_COLORS[(Math.random() * OBSTACLE_COLORS.length) | 0]; const h = t.h; const w = t.w; const y = GROUND_Y - h; const x = W + rand(12, 48); // just off-screen to the right obstacles.push({ x, y, w, h, type: t.name, color }); }
+        // Check collision between player and obstacle
+        function checkCollision(obs) {
+            return player.x + PLAYER_WIDTH > obs.x &&
+                   player.x < obs.x + obs.width &&
+                   player.y + PLAYER_HEIGHT > groundY - obs.height;
+        }
 
-// Input function jump() { if (state.dead) return; if (!state.playing) { startGame(); return; } if (roo.grounded) { roo.vy = JUMP_VELOCITY; roo.grounded = false; } } window.addEventListener('pointerdown', jump); window.addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); } if (state.dead && (e.code === 'Space' || e.code === 'Enter')) restart(); });
+        // Game loop
+        function gameLoop() {
+            time += 1; // Increment time for animations
 
-document.addEventListener('visibilitychange', () => { // If tab gets hidden, avoid physics time-skips lastTime = performance.now(); });
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-function startGame() { state.playing = true; state.dead = false; state.time = 0; state.score = 0; state.distSinceSpawn = 0; state.nextGap = rand(SPAWN_GAP.min, SPAWN_GAP.max); state.startedAt = performance.now(); obstacles.length = 0; placeRooOnGround(); }
+            // Draw ground
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, groundY, canvas.width, GROUND_HEIGHT);
 
-function gameOver() { state.dead = true; state.playing = false; state.best = Math.max(state.best, Math.floor(state.score)); }
+            if (gameState === 'playing') {
+                // Player movement
+                player.x += SPEED;
 
-function restart() { startGame(); }
+                // Apply gravity and update position
+                player.vy += GRAVITY;
+                player.y += player.vy;
 
-// Main loop let lastTime = performance.now(); function loop(now) { const rawDt = (now - lastTime) / 1000; lastTime = now; const dt = Math.min(0.033, Math.max(0.001, rawDt));
+                // Ground collision
+                if (player.y > groundY - PLAYER_HEIGHT) {
+                    player.y = groundY - PLAYER_HEIGHT;
+                    player.vy = 0;
+                }
 
-update(dt);
-draw();
+                // Subtle hopping if grounded
+                if (player.y === groundY - PLAYER_HEIGHT) {
+                    player.y += Math.sin(time * HOP_FREQUENCY) * HOP_AMPLITUDE;
+                }
 
-requestAnimationFrame(loop);
+                // Spawn obstacles if needed
+                if (lastSpawnX < player.x + canvas.width) {
+                    spawnObstacle();
+                }
 
-} requestAnimationFrame(loop);
+                // Move and draw obstacles
+                obstacles.forEach((obs, index) => {
+                    obs.x -= SPEED;
 
-function update(dt) { // Score increases with distance covered if (state.playing) state.score += (RUN_SPEED * dt) * 0.1; // simple scaling
+                    // Draw obstacle (simple rectangle)
+                    ctx.fillStyle = '#FF0000';
+                    ctx.fillRect(obs.x, groundY - obs.height, obs.width, obs.height);
 
-// Spawn logic (delay a moment at start)
-if (state.playing && (performance.now() - state.startedAt) > SAFE_START_MS) {
-  state.distSinceSpawn += RUN_SPEED * dt;
-  if (state.distSinceSpawn >= state.nextGap) {
-    spawnObstacle();
-    state.distSinceSpawn = 0;
-    // Slight difficulty ramp: shrink max gap a bit over time
-    const ramp = Math.max(0.6, 1 - state.score / 2000);
-    state.nextGap = rand(SPAWN_GAP.min * ramp, SPAWN_GAP.max * ramp);
-  }
-}
+                    // Remove off-screen obstacles
+                    if (obs.x + obs.width < 0) {
+                        obstacles.splice(index, 1);
+                    }
 
-// Move obstacles left
-for (let i = obstacles.length - 1; i >= 0; i--) {
-  const o = obstacles[i];
-  if (state.playing) o.x -= RUN_SPEED * dt;
-  if (o.x + o.w < -20) obstacles.splice(i, 1);
-}
+                    // Check collision
+                    if (checkCollision(obs)) {
+                        gameState = 'over';
+                    }
+                });
 
-// Roo physics
-if (state.playing) {
-  if (!roo.grounded) {
-    roo.vy += GRAVITY * dt;
-    roo.y += roo.vy * dt;
-    if (roo.y >= GROUND_Y - ROO.h) {
-      placeRooOnGround();
-    }
-  } else {
-    // grounded tiny visual bob
-    roo.bobT += dt * BOB.freq;
-  }
-}
+                // Draw player (simple rectangle for placeholder)
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT);
 
-// Collision (AABB)
-if (state.playing) {
-  const rb = { x: roo.x, y: roo.y, w: ROO.w, h: ROO.h };
-  for (const o of obstacles) {
-    if (rectsOverlap(rb, o)) {
-      gameOver();
-      break;
-    }
-  }
-}
+            } else if (gameState === 'start') {
+                // Start screen
+                ctx.fillStyle = '#000';
+                ctx.font = '30px Arial';
+                ctx.fillText('Hoparoo', canvas.width / 2 - 80, canvas.height / 2 - 50);
+                ctx.fillText('Tap/Click/Space to Start', canvas.width / 2 - 150, canvas.height / 2);
 
-}
+            } else if (gameState === 'over') {
+                // Game over screen
+                ctx.fillStyle = '#000';
+                ctx.font = '30px Arial';
+                ctx.fillText('Game Over', canvas.width / 2 - 100, canvas.height / 2 - 50);
+                ctx.fillText('Tap/Click/Space to Retry', canvas.width / 2 - 180, canvas.height / 2);
+            }
 
-function draw() { // Background drawSky(); drawGround();
+            requestAnimationFrame(gameLoop);
+        }
 
-// Obstacles
-for (const o of obstacles) drawObstacle(o);
-
-// Player
-drawRoo();
-
-// HUD
-drawHUD();
-
-if (!state.playing && !state.dead) drawPrompt();
-if (state.dead) drawGameOver();
-
-}
-
-function drawSky() { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); // Simple parallax dots (stars/dust) const t = performance.now() * 0.0001; ctx.globalAlpha = 0.25; for (let i = 0; i < 40; i++) { const x = ((i * 97) % W) - ((t * 50) % W); const y = (i * 67) % (GROUND_Y - 40); ctx.fillStyle = 'white'; ctx.fillRect((x + W) % W, y, 2, 2); } ctx.globalAlpha = 1; }
-
-function drawGround() { ctx.fillStyle = GROUND_COLOR; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y); // little dashes to imply motion const dashW = 32, dashH = 3, gap = 20; const offset = -((performance.now() * RUN_SPEED * 0.002) % (dashW + gap)); ctx.globalAlpha = 0.35; ctx.fillStyle = '#9ca3af'; for (let x = offset; x < W + dashW; x += dashW + gap) { ctx.fillRect(x, GROUND_Y + 18, dashW, dashH); } ctx.globalAlpha = 1; }
-
-function drawObstacle(o) { ctx.fillStyle = o.color; // Use shape hint by type (purely cosmetic for now) if (o.type === 'emu') { // tall rectangle with a small head ctx.fillRect(o.x, o.y, o.w, o.h - 12); ctx.fillRect(o.x + o.w - 12, o.y - 8, 12, 12); } else if (o.type === 'roo') { // wider, kangaroo-ish blob roundedRect(o.x, o.y + 6, o.w, o.h - 6, 8); ctx.fill(); ctx.fillRect(o.x + o.w - 10, o.y - 6, 10, 12); // ear } else { // rock roundedRect(o.x, o.y + 8, o.w, o.h - 8, 6); ctx.fill(); } }
-
-function drawRoo() { const bobOffset = (roo.grounded ? Math.sin(roo.bobT) * BOB.amp : 0); const x = roo.x, y = roo.y + bobOffset;
-
-// Simple body
-ctx.fillStyle = KANGAROO_COLOR;
-roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
-// head
-ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18);
-// ear
-ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);
-// tail
-ctx.fillRect(x - 14, y + 12, 14, 6);
-
-// feet flash when landing
-if (roo.grounded) {
-  ctx.globalAlpha = 0.4;
-  ctx.fillRect(x + 6, GROUND_Y - 2, 22, 2);
-  ctx.fillRect(x + ROO.w - 28, GROUND_Y - 2, 22, 2);
-  ctx.globalAlpha = 1;
-}
-
-}
-
-function drawHUD() { ctx.font = '600 18px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell'; ctx.textBaseline = 'top'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; const s = Math.floor(state.score); ctx.fillText(m: ${s}, 14, 14); if (state.best > 0) { ctx.fillText(best: ${state.best}, 14, 36); } }
-
-function drawPrompt() { ctx.font = '700 24px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fillText('Tap to hop → jump over obstacles', W/2, H/2 - 8); ctx.font = '400 14px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell'; ctx.fillText('Space/↑ also works • single jump • no sprites yet', W/2, H/2 + 20); }
-
-function drawGameOver() { ctx.font = '800 32px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(255,255,255,0.98)'; ctx.fillText('BONK!', W/2, H/2 - 22); ctx.font = '600 18px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell'; ctx.fillText('Tap to try again', W/2, H/2 + 6); }
-
-// ===== Utils ===== function rand(min, max) { return min + Math.random() * (max - min); } function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; } function roundedRect(x, y, w, h, r) { const rr = Math.min(r, w/2, h/2); ctx.beginPath(); ctx.moveTo(x + rr, y); ctx.lineTo(x + w - rr, y); ctx.quadraticCurveTo(x + w, y, x + w, y + rr); ctx.lineTo(x + w, y + h - rr); ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h); ctx.lineTo(x + rr, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rr); ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y); } })(); </script>
-
+        // Start the game loop
+        gameLoop();
+    </script>
 </body>
 </html>
