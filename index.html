@@ -94,7 +94,7 @@
 
   // Optional fine-tune for sprite draw relative to the hitbox
   // === Player sprite ===
-  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/Kangaroo.png?v=1';          // <- paste actual RAW
+  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/kangaroo.png?v=1';          // <- paste actual RAW
   const ROO_IMG_OFFSET = { x: 0, y: 0 };     // tweak feet alignment (+y = lower)
   const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 }; // radians
 
@@ -171,7 +171,7 @@
   async function loadImages(){
     // Player
     if (ROO_IMG_URL){
-      rooImg = await loadImage(ROO_IMG_URL);
+      rooImg = await loadStripWithChroma(ROO_IMG_URL, BG_CHROMA, BG_CHROMA_TOL);
       rooImgLoaded = true;
     }
 
