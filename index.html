@@ -88,6 +88,7 @@
   const GRAVITY = 2200;
   const JUMP_VELOCITY = -900;
   const GROUND_RATIO = 0.78;
+  const FADE_W = 64; // For smooth tree tiling blends
 
   // Player size (logical hitbox), image will be scaled to this
   const ROO = { w: 64, h: 46 };
@@ -106,7 +107,7 @@
   // Remove black from trees.png
   const BG_CHROMA       = [0,0,0];
   const BG_CHROMA_TOL   = 34;                // raised for smoother edges
-  const BG_MIRROR_TILING = true;             // mirror tiles to hide seams
+  const BG_MIRROR_TILING = false;            // disabled for blend mode
 
   const BOB = { amp: 24, freq: 5.5 }; // boosted for more hop-like animation
   const SPAWN_GAP = { min: 380, max: 720 };
@@ -178,17 +179,39 @@
     // Trees with one-time chroma-key
     if (BG_FRONT_URL) {
       bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
+      addEdgeFades(bgFrontImg, FADE_W);
       bgFrontLoaded = true;
     }
     if (BG_BACK_URL) {
       bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
+      addEdgeFades(bgBackImg, FADE_W);
       bgBackLoaded = true;
     } else if (bgFrontImg) {
       bgBackImg = makeVariant(bgFrontImg, 0.96, 0.88); // lighter, less saturated
+      addEdgeFades(bgBackImg, FADE_W);
       bgBackLoaded = true;
     }
   }
   loadImages();
+
+  function addEdgeFades(c, fadeW) {
+    if (c.width < fadeW * 2) return; // too small, skip
+    const g = c.getContext('2d');
+    g.globalCompositeOperation = 'destination-out';
+    // Left fade
+    const leftGrad = g.createLinearGradient(0, 0, fadeW, 0);
+    leftGrad.addColorStop(0, '#000'); // full erase
+    leftGrad.addColorStop(1, 'transparent');
+    g.fillStyle = leftGrad;
+    g.fillRect(0, 0, fadeW, c.height);
+    // Right fade
+    const rightGrad = g.createLinearGradient(c.width - fadeW, 0, c.width, 0);
+    rightGrad.addColorStop(0, '#000');
+    rightGrad.addColorStop(1, 'transparent');
+    g.fillStyle = rightGrad;
+    g.fillRect(c.width - fadeW, 0, fadeW, c.height);
+    g.globalCompositeOperation = 'source-over';
+  }
 
   function resize() {
     W = Math.floor(window.innerWidth);
@@ -198,8 +221,8 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
 
-    BACK_H  = Math.floor(H * 0.35); // lowered
-    FRONT_H = Math.floor(H * 0.5); // lowered a bit
+    BACK_H  = Math.floor(H * 0.3); // lowered more
+    FRONT_H = Math.floor(H * 0.45); // lowered more
     backY   = GROUND_Y - BACK_H;
     frontY  = GROUND_Y - FRONT_H;
 
@@ -209,8 +232,8 @@
   resize();
 
   function buildBands() {
-    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true); bandBack = b.canvas; bandBackW = b.w; }
-    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false); bandFront = f.canvas; bandFrontW = f.w; }
+    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true); bandBack = b.canvas; bandBackW = b.w; addEdgeFades(bandBack, FADE_W); }
+    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false); bandFront = f.canvas; bandFrontW = f.w; addEdgeFades(bandFront, FADE_W); }
   }
 
   // Game state
@@ -489,11 +512,14 @@
     if (!src) return;
 
     const scale = h / src.height;
-    const tileW = src.width * scale;
+    const srcW = src.width;
+    const tileW = srcW * scale;
+    const fade = FADE_W * scale;
+    const repeatDist = tileW - fade;
     const blurBack = (layer==='back' && !BG_BACK_URL); // only blur if reusing front
-    let x = -((xOffset % tileW) + tileW);
+    let x = -((xOffset % repeatDist) + repeatDist);
 
-    for (let i=0; x < W + tileW; i++, x += tileW){
+    for (let i=0; x < W + tileW; i++, x += repeatDist){
       if (blurBack){ ctx.filter='blur(1px) saturate(0.9)'; ctx.globalAlpha=0.95; }
       if (BG_MIRROR_TILING && (i % 2)){
         ctx.save(); ctx.scale(-1,1);
@@ -545,13 +571,8 @@
       gc.restore();
     }
 
-    const fadeW = 18;
-    const leftGrad = gc.createLinearGradient(0, 0, fadeW, 0);
-    leftGrad.addColorStop(0, 'rgba(0,0,0,0)'); leftGrad.addColorStop(1, 'rgba(0,0,0,0.18)');
-    gc.fillStyle = leftGrad; gc.fillRect(0, 0, fadeW, h);
-    const rightGrad = gc.createLinearGradient(tileW - fadeW, 0, tileW, 0);
-    rightGrad.addColorStop(0, 'rgba(0,0,0,0.18)'); rightGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    gc.fillStyle = rightGrad; gc.fillRect(tileW - fadeW, 0, fadeW, h);
+    // No old fades; add new edge fades instead
+    addEdgeFades(c, FADE_W);
 
     return { canvas: c, w: tileW, h };
   }
