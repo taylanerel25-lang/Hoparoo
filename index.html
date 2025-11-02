@@ -85,36 +85,36 @@
 
   // ======= TWEAK ZONE =======
   const RUN_SPEED = 300;
-  const GRAVITY = 2200;
-  const JUMP_VELOCITY = -900;
+  const GRAVITY = 2000;
+  const JUMP_VELOCITY = -600;
   const GROUND_RATIO = 0.78;
+  const FADE_W = 128;
 
-  // Player size (logical hitbox), image will be scaled to this
-  const ROO = { w: 64, h: 46 };
+  // Player size
+  const ROO = { w: 130, h: 94 };
 
-  // Optional fine-tune for sprite draw relative to the hitbox
-  // === Player sprite ===
-  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Kangaroo?v=1';          // Exact name from your repo (no .png)
-  const ROO_IMG_OFFSET = { x: 0, y: 0 };     // tweak feet alignment (+y = lower)
-  const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 }; // radians
+  // === Player sprite (8-frame hop cycle, transparent PNG) ===
+  const ROO_IMG_URL = 'https://i.imgur.com/8n2jV3Z.png'; // 8-frame kangaroo hop sheet
+  const ROO_FRAMES = 8;
+  const ROO_IMG_OFFSET = { x: 0, y: 0 };
+  const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 };
 
   // === Trees / parallax ===
-  const BG_FRONT_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Trees.png?v=1';          // foreground treeline
-  const BG_BACK_URL  = '';                   // leave blank to auto-derive back layer
+  const BG_FRONT_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Trees.png?v=1';
+  const BG_BACK_URL  = '';
   const BG_SCROLL = { back: 0.22, front: 0.55 };
 
-  // Remove black from trees.png
   const BG_CHROMA       = [0,0,0];
-  const BG_CHROMA_TOL   = 34;                // raised for smoother edges
-  const BG_MIRROR_TILING = true;             // mirror tiles to hide seams
+  const BG_CHROMA_TOL   = 34;
+  const BG_MIRROR_TILING = true;
 
-  const BOB = { amp: 12, freq: 4 }; // adjusted for more hop-like bobbing
+  const BOB = { amp: 28, freq: 6.8 };
   const SPAWN_GAP = { min: 380, max: 720 };
   const SAFE_START_MS = 1200;
 
   const SKY = ['#78c6ff', '#d9f0ff'];
   const GROUND_COLOR = '#2e3a45';
-  const KANGAROO_COLOR = '#22c55e'; // fallback if image missing
+  const KANGAROO_COLOR = '#22c55e';
 
   const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa'];
   const OBSTACLE_TYPES = [
@@ -123,7 +123,7 @@
     { name: 'roo',    w: 52, h: 42 },
   ];
 
-  // Parallax backgrounds (images optional; realistic fallback built-in)
+  const BOUNCE_DAMPING = 0.7;
   // ======= /TWEAK ZONE =======
 
   // DOM refs
@@ -148,47 +148,65 @@
 
   let W = 0, H = 0, GROUND_Y = 0;
 
-  // Player sprite
-  let rooImg=null, rooImgLoaded=false;
-  let bgBackImg=null, bgFrontImg=null, bgBackLoaded=false, bgFrontLoaded=false;
+  // Assets
+  let rooImg = null, rooImgLoaded = false;
+  let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
 
   // Parallax state
   let bgBackX = 0, bgFrontX = 0;
   let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
   let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
 
-  // Palettes for procedural trees
+  // Tree palettes
   const PALETTE_BACK = {
-    leafLight: '#8fbf9a', leafMid: '#78aa87', leafDark: '#5f8f6c',
-    trunkLight: '#7e6a48', trunkDark: '#5a4732', haze: 'rgba(255,255,255,0.10)'
+    leafLight: '#a8d5a8', leafMid: '#8ab88a', leafDark: '#6b9a6b',
+    trunkLight: '#8c7a5e', trunkDark: '#5d4a36', shadow: 'rgba(0,0,0,0.12)'
   };
   const PALETTE_FRONT = {
-    leafLight: '#3f7f52', leafMid: '#2f6a41', leafDark: '#1f4a2c',
-    trunkLight: '#6c543b', trunkDark: '#4a3824', haze: 'rgba(255,255,255,0.05)'
+    leafLight: '#4a9c5f', leafMid: '#3a7d4a', leafDark: '#2a5d38',
+    trunkLight: '#7a6248', trunkDark: '#5a4530', shadow: 'rgba(0,0,0,0.18)'
   };
 
   // Load assets
   async function loadImages(){
-    // Player
-    if (ROO_IMG_URL){
-      rooImg = await loadStripWithChroma(ROO_IMG_URL, BG_CHROMA, BG_CHROMA_TOL);
-      rooImgLoaded = true;
+    try {
+      if (ROO_IMG_URL) {
+        rooImg = await loadStripWithChroma(ROO_IMG_URL, [0,0,0], 40);
+        rooImgLoaded = true;
+      }
+    } catch (e) {
+      console.warn("Kangaroo sprite failed to load, using fallback.");
+      rooImgLoaded = false;
     }
 
-    // Trees with one-time chroma-key
-    if (BG_FRONT_URL) {
-      bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
-      bgFrontLoaded = true;
-    }
-    if (BG_BACK_URL) {
-      bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
-      bgBackLoaded = true;
-    } else if (bgFrontImg) {
-      bgBackImg = makeVariant(bgFrontImg, 0.96, 0.88); // lighter, less saturated
+    try {
+      if (BG_FRONT_URL) {
+        bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
+        addEdgeFades(bgFrontImg, FADE_W);
+        bgFrontLoaded = true;
+      }
+    } catch (e) { bgFrontLoaded = false; }
+
+    if (!bgBackLoaded && bgFrontImg) {
+      bgBackImg = makeVariant(bgFrontImg, 0.94, 0.86);
+      addEdgeFades(bgBackImg, FADE_W);
       bgBackLoaded = true;
     }
   }
   loadImages();
+
+  function addEdgeFades(c, fadeW) {
+    if (c.width < fadeW * 2) return;
+    const g = c.getContext('2d');
+    g.globalCompositeOperation = 'destination-out';
+    const leftGrad = g.createLinearGradient(0, 0, fadeW, 0);
+    leftGrad.addColorStop(0, '#000'); leftGrad.addColorStop(1, 'transparent');
+    g.fillStyle = leftGrad; g.fillRect(0, 0, fadeW, c.height);
+    const rightGrad = g.createLinearGradient(c.width - fadeW, 0, c.width, 0);
+    rightGrad.addColorStop(0, '#000'); rightGrad.addColorStop(1, 'transparent');
+    g.fillStyle = rightGrad; g.fillRect(c.width - fadeW, 0, fadeW, c.height);
+    g.globalCompositeOperation = 'source-over';
+  }
 
   function resize() {
     W = Math.floor(window.innerWidth);
@@ -198,8 +216,8 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
 
-    BACK_H  = Math.floor(H * 0.35); // lowered
-    FRONT_H = Math.floor(H * 0.5); // lowered a bit
+    BACK_H  = Math.floor(H * 0.28);
+    FRONT_H = Math.floor(H * 0.40);
     backY   = GROUND_Y - BACK_H;
     frontY  = GROUND_Y - FRONT_H;
 
@@ -209,26 +227,36 @@
   resize();
 
   function buildBands() {
-    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true); bandBack = b.canvas; bandBackW = b.w; }
-    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false); bandFront = f.canvas; bandFrontW = f.w; }
+    if (!BG_BACK_URL && !bandBack) {
+      const b = createTreeBand(BACK_H, PALETTE_BACK, 0.85, true);
+      bandBack = b.canvas; bandBackW = b.w;
+      addEdgeFades(bandBack, FADE_W);
+    }
+    if (!BG_FRONT_URL && !bandFront) {
+      const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.25, false);
+      bandFront = f.canvas; bandFrontW = f.w;
+      addEdgeFades(bandFront, FADE_W);
+    }
   }
 
   // Game state
   const state = {
-    playing: false,
-    dead: false,
-    time: 0,
-    score: 0,
+    playing: false, dead: false, time: 0, score: 0,
     best: Number(localStorage.getItem('hoparoo_best')||0),
-    distSinceSpawn: 0,
-    nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
-    startedAt: 0,
+    distSinceSpawn: 0, nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
+    startedAt: 0, justLanded: false,
   };
   bestHud.textContent = `Best: ${state.best}`;
 
   // Roo
-  const roo = { x: Math.max(80, W * 0.18), y: 0, vy: 0, grounded: true, bobT: 0 };
-  function placeRooOnGround() { roo.y = GROUND_Y - ROO.h; roo.vy = 0; roo.grounded = true; }
+  const roo = { x: Math.max(110, W * 0.18), y: 0, vy: 0, grounded: true, bobT: 0, landT: 0 };
+  function placeRooOnGround() {
+    roo.y = GROUND_Y - ROO.h;
+    roo.vy = 0;
+    roo.grounded = true;
+    state.justLanded = true;
+    roo.landT = 0.15;
+  }
   placeRooOnGround();
 
   // Obstacles
@@ -248,8 +276,8 @@
   }
   window.addEventListener('pointerdown', jump);
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); }
-    if (state.dead && (e.code === 'Space' || e.code === 'Enter')) doPlayAgain();
+    if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); jump(); }
+    if (state.dead && ['Space', 'Enter'].includes(e.code)) doPlayAgain();
   });
   document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
 
@@ -300,7 +328,6 @@
   requestAnimationFrame(loop);
 
   function update(dt) {
-    // Parallax motion
     bgBackX  += RUN_SPEED * BG_SCROLL.back  * dt;
     bgFrontX += RUN_SPEED * BG_SCROLL.front * dt;
 
@@ -331,8 +358,9 @@
         if (roo.y >= GROUND_Y - ROO.h) { placeRooOnGround(); }
       } else {
         roo.bobT += dt * BOB.freq;
+        if (roo.landT > 0) roo.landT = Math.max(0, roo.landT - dt);
       }
-      // Slightly forgiving hitbox
+
       const shrink = 0.86;
       const rb = {
         x: roo.x + (ROO.w * (1 - shrink)) / 2,
@@ -340,7 +368,16 @@
         w: ROO.w * shrink,
         h: ROO.h * shrink
       };
-      for (const o of obstacles) { if (rectsOverlap(rb, o)) { gameOver(); break; } }
+      let collided = false;
+      for (const o of obstacles) {
+        if (rectsOverlap(rb, o)) {
+          collided = true;
+          roo.vy *= -BOUNCE_DAMPING;
+          roo.y += roo.vy * dt;
+          roo.grounded = false;
+          break;
+        }
+      }
     }
   }
 
@@ -351,12 +388,10 @@
   }
 
   function drawSky() {
-    // Blue sky
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-    // Clouds
     const t = performance.now() * 0.00006;
     ctx.globalAlpha = 0.14;
     for (let i = 0; i < 10; i++) {
@@ -367,7 +402,6 @@
     }
     ctx.globalAlpha = 1;
 
-    // Parallax bands
     drawParallaxBand({ img: bgBackImg, loaded: bgBackLoaded, xOffset: bgBackX, y: backY, h: BACK_H, layer: 'back' });
     drawParallaxBand({ img: bgFrontImg, loaded: bgFrontLoaded, xOffset: bgFrontX, y: frontY, h: FRONT_H, layer: 'front' });
   }
@@ -395,46 +429,66 @@
   }
 
   function drawRoo(){
-    const bobOffset = (roo.grounded ? Math.sin(roo.bobT) * BOB.amp : 0);
+    const sinVal = Math.sin(roo.bobT);
+    const bobOffset = (roo.grounded ? -Math.abs(sinVal) * BOB.amp : 0);
     const x = roo.x, y = roo.y + bobOffset;
 
-    // shadow
+    // Landing dust puff
+    if (state.justLanded && roo.landT > 0) {
+      ctx.save();
+      ctx.globalAlpha = roo.landT * 2;
+      ctx.filter = 'blur(2px)';
+      ctx.fillStyle = '#d4a574';
+      ctx.beginPath();
+      ctx.ellipse(x + ROO.w * 0.5, GROUND_Y - 2, ROO.w * 0.6, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      state.justLanded = false;
+    }
+
+    // Shadow
     ctx.save();
-    ctx.globalAlpha = 0.28; ctx.filter='blur(1px)';
-    ctx.beginPath(); ctx.ellipse(x + ROO.w*0.5, GROUND_Y - 2, ROO.w*0.42, 3, 0, 0, Math.PI*2);
-    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fill(); ctx.restore();
+    ctx.globalAlpha = 0.3; ctx.filter='blur(2px)';
+    ctx.beginPath(); ctx.ellipse(x + ROO.w*0.5, GROUND_Y - 2, ROO.w*0.45, 4, 0, 0, Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fill(); ctx.restore();
 
     if (rooImgLoaded && rooImg){
-      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : 0;
-      let scaleX = 1;
-      let scaleY = 1;
+      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : (-sinVal * 0.12);
+      let scaleX = 1, scaleY = 1;
+
       if (roo.grounded) {
-        const sinVal = Math.sin(roo.bobT);
-        scaleY = 1 + sinVal * 0.1; // squash when down, stretch when up
-        scaleX = 1 - sinVal * 0.05; // slight width change
-      } else {
-        const stretchFactor = Math.abs(roo.vy) / 500; // normalize based on velocity
-        scaleY = 1 - stretchFactor * 0.15; // squash on fall, stretch on rise? swap if needed
-        scaleX = 1 + stretchFactor * 0.05;
-        if (roo.vy < 0) { // rising
-          scaleY = 1 + stretchFactor * 0.15;
-          scaleX = 1 - stretchFactor * 0.05;
+        scaleY = 1 + Math.abs(sinVal) * 0.16;
+        scaleX = 1 - Math.abs(sinVal) * 0.09;
+        if (roo.landT > 0) {
+          scaleY *= (1 - roo.landT * 1.2);
+          scaleX *= (1 + roo.landT * 0.6);
         }
+      } else {
+        const stretch = Math.abs(roo.vy) / 500;
+        scaleY = 1 - stretch * 0.16;
+        scaleX = 1 + stretch * 0.06;
+        if (roo.vy < 0) { scaleY = 1 + stretch * 0.16; scaleX = 1 - stretch * 0.06; }
       }
+
       ctx.save();
       const cx = x + ROO.w/2, cy = y + ROO.h/2;
       ctx.translate(cx, cy);
       ctx.scale(scaleX, scaleY);
       ctx.rotate(clamp(tilt, -ROO_IMG_TILT.max, ROO_IMG_TILT.max));
-      ctx.drawImage(rooImg, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
+
+      const frameW = rooImg.width / ROO_FRAMES;
+      const frameH = rooImg.height;
+      let frameIndex = roo.grounded ? Math.floor(roo.bobT % ROO_FRAMES) : (roo.vy < 0 ? 2 : 6);
+      ctx.drawImage(rooImg, frameIndex * frameW, 0, frameW, frameH, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
+
       ctx.restore();
     } else {
-      // fallback blocky roo
-      ctx.fillStyle = '#22c55e';
-      roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
-      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18);
-      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);
-      ctx.fillRect(x - 14, y + 12, 14, 6);
+      // Fallback green roo (always works)
+      ctx.fillStyle = KANGAROO_COLOR;
+      roundedRect(x + 10, y + 6, ROO.w - 20, ROO.h - 6, 12); ctx.fill();
+      ctx.fillRect(x + ROO.w - 28, y - 10, 28, 28);
+      ctx.fillRect(x + ROO.w - 18, y - 25, 12, 18);
+      ctx.fillRect(x, y + 12, 18, 8);
     }
   }
 
@@ -449,6 +503,7 @@
     ctx.lineTo(x + w, y + h - rr); ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
     ctx.lineTo(x + rr, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
     ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
   }
 
   function loadImage(url){
@@ -458,7 +513,6 @@
     });
   }
 
-  // Chroma-key near-black pixels to transparent
   async function loadStripWithChroma(url, keyRGB, tol){
     const img = await loadImage(url);
     const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
@@ -471,7 +525,7 @@
       if (Math.abs(r-kr)<tol && Math.abs(gg-kg)<tol && Math.abs(b-kb)<tol) a[i+3]=0;
     }
     g.putImageData(d,0,0);
-    return c; // canvas usable by drawImage
+    return c;
   }
 
   function makeVariant(srcCanvas, brightness=1, saturation=1){
@@ -480,21 +534,19 @@
     g.drawImage(srcCanvas,0,0); return c;
   }
 
-  // Parallax bands (image or procedural)
   function drawParallaxBand({ img, loaded, xOffset, y, h, layer }){
-    // prefer image/canvas; else use existing procedural band if present
-    const src = (loaded && img && (img.width || img.naturalWidth))
-      ? img
-      : (layer==='back' ? bandBack : bandFront);
+    const src = (loaded && img) ? img : (layer==='back' ? bandBack : bandFront);
     if (!src) return;
 
     const scale = h / src.height;
-    const tileW = src.width * scale;
-    const blurBack = (layer==='back' && !BG_BACK_URL); // only blur if reusing front
-    let x = -((xOffset % tileW) + tileW);
+    const srcW = src.width;
+    const tileW = srcW * scale;
+    const fade = FADE_W * scale;
+    const repeatDist = tileW - fade;
+    let x = -((xOffset % repeatDist) + repeatDist);
 
-    for (let i=0; x < W + tileW; i++, x += tileW){
-      if (blurBack){ ctx.filter='blur(1px) saturate(0.9)'; ctx.globalAlpha=0.95; }
+    for (let i=0; x < W + tileW; i++, x += repeatDist){
+      if (layer==='back' && !BG_BACK_URL){ ctx.filter='blur(1.2px) saturate(0.88)'; ctx.globalAlpha=0.94; }
       if (BG_MIRROR_TILING && (i % 2)){
         ctx.save(); ctx.scale(-1,1);
         ctx.drawImage(src, -(x + tileW), y, tileW, h);
@@ -502,7 +554,7 @@
       } else {
         ctx.drawImage(src, x, y, tileW, h);
       }
-      if (blurBack){ ctx.filter='none'; ctx.globalAlpha=1; }
+      if (layer==='back' && !BG_BACK_URL){ ctx.filter='none'; ctx.globalAlpha=1; }
     }
   }
 
@@ -511,18 +563,18 @@
     const c = document.createElement('canvas'); c.width = tileW; c.height = h;
     const gc = c.getContext('2d');
 
-    gc.fillStyle = mix(pal.leafDark, '#0b0d10', 0.2);
-    gc.fillRect(0, h - 12, tileW, 12);
+    gc.fillStyle = mix(pal.leafDark, '#0b0d10', 0.25);
+    gc.fillRect(0, h - 10, tileW, 10);
 
     let seed = (Math.random() * 1e9) | 0;
     const rng = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
 
-    const count = Math.floor((tileW / 36) * density);
+    const count = Math.floor((tileW / 34) * density);
     for (let i = 0; i < count; i++) {
-      const baseX = (i * (tileW / count)) + rng() * 18;
-      const spread = 18 + rng() * 28;
-      const trunkW = 6 + rng() * 5;
-      const height = (h * (distant ? 0.35 : 0.55)) + rng() * (h * (distant ? 0.15 : 0.25));
+      const baseX = (i * (tileW / count)) + rng() * 20;
+      const spread = 20 + rng() * 32;
+      const trunkW = 7 + rng() * 6;
+      const height = (h * (distant ? 0.38 : 0.58)) + rng() * (h * (distant ? 0.14 : 0.22));
       const baseY = h;
 
       const gx = baseX + spread * 0.45;
@@ -531,47 +583,37 @@
       trunkGrad.addColorStop(0, pal.trunkLight);
       trunkGrad.addColorStop(1, pal.trunkDark);
       gc.fillStyle = trunkGrad;
-      gc.fillRect(gx, gyTop, trunkW, height);
+      gc.fillRect(gx - trunkW/2, gyTop, trunkW, height);
 
       const cx = baseX;
-      const cy = gyTop + height * (distant ? 0.35 : 0.28);
+      const cy = gyTop + height * (distant ? 0.32 : 0.25);
 
-      paintLeaves(gc, cx, cy, spread, height * (distant ? 0.48 : 0.62), pal, distant);
+      paintFoliage(gc, cx, cy, spread, height * 0.65, pal, distant);
+      paintFoliage(gc, cx + rng()*4 - 2, cy - height*0.08, spread*0.88, height*0.55, pal, distant);
+      paintFoliage(gc, cx + rng()*6 - 3, cy - height*0.15, spread*0.75, height*0.45, pal, distant);
 
       gc.save();
-      gc.globalAlpha = 0.25;
-      gc.filter = 'blur(0.6px)';
-      roundedRect(baseX - spread * 0.2, h - 4, spread * 1.2, 4, 2); gc.fill();
+      gc.globalAlpha = distant ? 0.08 : 0.14;
+      gc.filter = 'blur(1.2px)';
+      roundedRect(baseX - spread * 0.25, h - 4, spread * 1.5, 5, 3); gc.fillStyle = pal.shadow; gc.fill();
       gc.restore();
     }
 
-    const fadeW = 18;
-    const leftGrad = gc.createLinearGradient(0, 0, fadeW, 0);
-    leftGrad.addColorStop(0, 'rgba(0,0,0,0)'); leftGrad.addColorStop(1, 'rgba(0,0,0,0.18)');
-    gc.fillStyle = leftGrad; gc.fillRect(0, 0, fadeW, h);
-    const rightGrad = gc.createLinearGradient(tileW - fadeW, 0, tileW, 0);
-    rightGrad.addColorStop(0, 'rgba(0,0,0,0.18)'); rightGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    gc.fillStyle = rightGrad; gc.fillRect(tileW - fadeW, 0, fadeW, h);
-
+    addEdgeFades(c, FADE_W);
     return { canvas: c, w: tileW, h };
   }
 
-  function paintLeaves(gc, cx, cy, w, h, pal, distant) {
-    gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h); gc.fill();
-    gc.fillStyle = pal.leafMid;  organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78); gc.fill();
-
-    const hl = gc.createRadialGradient(cx, cy - h*0.25, 10, cx, cy - h*0.25, Math.max(20, w*0.9));
-    hl.addColorStop(0, pal.leafLight); hl.addColorStop(1, 'rgba(255,255,255,0)');
-    gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5); gc.fill();
-
-    gc.save();
-    gc.globalAlpha = distant ? 0.08 : 0.12;
-    for (let i = 0; i < 22; i++) {
-      const px = cx + (Math.random() - 0.5) * w * 0.9;
-      const py = cy - h*0.2 + (Math.random() - 0.2) * h * 0.7;
-      roundedRect(px, py, 6 + Math.random()*8, 4 + Math.random()*6, 2); gc.fillStyle = pal.leafLight; gc.fill();
+  function paintFoliage(gc, cx, cy, w, h, pal, distant) {
+    const layers = distant ? 2 : 3;
+    for (let l = 0; l < layers; l++) {
+      const scale = 1 - l * 0.25;
+      const alpha = 1 - l * 0.3;
+      gc.globalAlpha = alpha * (distant ? 0.7 : 1);
+      gc.fillStyle = l === 0 ? pal.leafDark : (l === 1 ? pal.leafMid : pal.leafLight);
+      organicBlob(gc, cx + (Math.random()-0.5)*w*0.1, cy, w * scale, h * scale);
+      gc.fill();
     }
-    gc.restore();
+    gc.globalAlpha = 1;
   }
 
   function organicBlob(gc, cx, cy, w, h) {
@@ -581,7 +623,9 @@
     gc.bezierCurveTo(cx + w*0.25, cy - h*0.75, cx + w*0.55, cy - h*0.35, cx + w/2, cy);
     gc.bezierCurveTo(cx + w*0.55, cy + h*0.35, cx + w*0.25, cy + h*0.5, cx, cy + h*0.45);
     gc.bezierCurveTo(cx - w*0.25, cy + h*0.5, cx - w*0.55, cy + h*0.35, cx - w/2, cy);
+    gc.closePath();
   }
+
   function mix(hex, hex2, t) {
     const a = parseInt(hex.slice(1),16), b = parseInt(hex2.slice(1),16);
     const r = (a>>16)&255, g=(a>>8)&255, bl=a&255;
