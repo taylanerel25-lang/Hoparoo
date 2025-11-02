@@ -94,7 +94,9 @@
   const ROO = { w: 96, h: 69 }; // Bigger kangaroo for that star power!
 
   // Optional fine-tune for sprite draw relative to the hitbox
-  // === Player sprite ===
+  const ROO_IMG_OFFSET = { x: 0, y: 0 };
+  const ROO_IMG_TILT = { up: 0.1, down: -0.08, max: 0.28 };
+
   // Remove black from trees.png
   const BG_CHROMA       = [0,0,0];
   const BG_CHROMA_TOL   = 34;                // raised for smoother edges
@@ -102,10 +104,212 @@
 
   const BOB = { amp: 24, freq: 5.5 }; // boosted for more hop-like animation
   const SPAWN_GAP = { min: 380, max: 720 };
+  const OBSTACLE_TYPES = [
+    { name: 'cactus', w: 42, h: 80, color: '#16a34a' },
+    { name: 'rock',   w: 64, h: 48, color: '#4b5563' },
+    { name: 'emu',    w: 58, h: 96 },
+    { name: 'roo',    w: 52, h: 42 },
+  ];
+
   const BOUNCE_DAMPING = 0.85; // Increased for bouncier feel (better bounce)
 
   // Parallax backgrounds (images optional; realistic fallback built-in)
-  // ======= /TWEAK ZONE =======
+  // ======= /TWEAK ZONE ======= 
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W, H, GROUND_Y;
+  let roo = { x: 120, y: 0, vy: 0, grounded: true, bobT: 0 };
+  let obstacles = [];
+  let score = 0, best = 0;
+  let worldX = 0;
+  let running = false;
+
+  // Parallax
+  let bgBackX = 0, bgFrontX = 0;
+  let backY, frontY, BACK_H, FRONT_H;
+  let bgBackImg, bgBackLoaded = false;
+  let bgFrontImg, bgFrontLoaded = false;
+  let bandBack, bandFront;
+
+  // Colors
+  const SKY = ['#3b82f6', '#93c5fd'];
+  const GROUND_COLOR = '#d97706';
+
+  // Images (optional)
+  const ROO_IMG_URL = ''; // e.g. 'https://example.com/roo.png'
+  const BG_BACK_URL = ''; // e.g. 'https://example.com/trees_back.png'
+  const BG_FRONT_URL = ''; // e.g. 'https://example.com/trees_front.png'
+  let rooImg, rooImgLoaded = false;
+
+  // Palettes for procedural trees
+  const TREE_PAL_BACK = { trunkLight: '#6d28d9', trunkDark: '#4c1d95', leafLight: '#a855f7', leafMid: '#7e22ce', leafDark: '#581c87' };
+  const TREE_PAL_FRONT = { trunkLight: '#3f6219', trunkDark: '#2a3f11', leafLight: '#84cc16', leafMid: '#65a30d', leafDark: '#4d7c0f' };
+
+  init();
+
+  async function init() {
+    resize(); window.addEventListener('resize', resize);
+    document.addEventListener('pointerdown', handleTap);
+    if (ROO_IMG_URL) loadRooImg();
+    if (BG_BACK_URL) loadBgBack();
+    if (BG_FRONT_URL) loadBgFront();
+    else createProceduralBands();
+    setupHud();
+    requestAnimationFrame(loop);
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.scale(dpr, dpr);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    GROUND_Y = H * GROUND_RATIO;
+    roo.y = GROUND_Y - ROO.h;
+    BACK_H = GROUND_Y * 0.45;
+    FRONT_H = GROUND_Y * 0.65;
+    backY = GROUND_Y - BACK_H;
+    frontY = GROUND_Y - FRONT_H;
+    if (!BG_BACK_URL) bandBack = createTreeBand(BACK_H, TREE_PAL_BACK, 0.65, true);
+    if (!BG_FRONT_URL) bandFront = createTreeBand(FRONT_H, TREE_PAL_FRONT, 0.85);
+  }
+
+  async function loadRooImg() {
+    try {
+      rooImg = await loadImage(ROO_IMG_URL);
+      rooImgLoaded = true;
+    } catch {}
+  }
+
+  async function loadBgBack() {
+    try {
+      bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
+      bgBackLoaded = true;
+    } catch {}
+  }
+
+  async function loadBgFront() {
+    try {
+      bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
+      bgFrontLoaded = true;
+    } catch {}
+  }
+
+  function createProceduralBands() {
+    bandBack = createTreeBand(BACK_H, TREE_PAL_BACK, 0.65, true);
+    bandFront = createTreeBand(FRONT_H, TREE_PAL_FRONT, 0.85);
+  }
+
+  function handleTap(e) {
+    if (!running) startGame();
+    else if (roo.grounded) jump();
+  }
+
+  function jump() {
+    roo.vy = JUMP_VELOCITY;
+    roo.grounded = false;
+  }
+
+  function startGame() {
+    running = true;
+    score = 0;
+    worldX = 0;
+    obstacles = [];
+    roo.y = GROUND_Y - ROO.h;
+    roo.vy = 0;
+    roo.grounded = true;
+    document.getElementById('splash').style.display = 'none';
+    document.getElementById('gameOver').style.display = 'none';
+  }
+
+  let lastT = 0;
+  function loop(t) {
+    requestAnimationFrame(loop);
+    const dt = (t - lastT) / 1000;
+    lastT = t;
+    if (running) update(dt);
+    draw();
+  }
+
+  let nextSpawn = 0;
+  function update(dt) {
+    worldX += RUN_SPEED * dt;
+    bgBackX += RUN_SPEED * dt * 0.3;
+    bgFrontX += RUN_SPEED * dt * 0.6;
+
+    score = Math.floor(worldX / 100);
+    document.getElementById('scoreHud').textContent = score;
+
+    roo.bobT += dt * BOB.freq;
+    if (roo.bobT > Math.PI * 2) roo.bobT -= Math.PI * 2;
+
+    if (!roo.grounded) {
+      roo.vy += GRAVITY * dt;
+      roo.y += roo.vy * dt;
+      if (roo.y >= GROUND_Y - ROO.h) {
+        roo.y = GROUND_Y - ROO.h;
+        roo.vy = 0;
+        roo.grounded = true;
+      }
+    }
+
+    spawnObstacles(dt);
+    updateObstacles(dt);
+    checkCollisions(dt);
+  }
+
+  function spawnObstacles(dt) {
+    nextSpawn -= RUN_SPEED * dt;
+    if (nextSpawn <= 0) {
+      const type = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
+      const o = { 
+        x: W + 20, 
+        y: GROUND_Y - type.h, 
+        w: type.w, 
+        h: type.h, 
+        type: type.name, 
+        color: type.color || (type.name === 'emu' ? '#92400e' : '#f59e0b') 
+      };
+      obstacles.push(o);
+      nextSpawn = rand(SPAWN_GAP.min, SPAWN_GAP.max);
+    }
+  }
+
+  function updateObstacles(dt) {
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const o = obstacles[i];
+      o.x -= RUN_SPEED * dt;
+      if (o.x + o.w < 0) obstacles.splice(i, 1);
+    }
+  }
+
+  function checkCollisions(dt) {
+    const shrink = 0.75; // forgiving hitbox
+    const rb = {
+      x: roo.x + ROO.w * (1 - shrink) / 2,
+      y: roo.y + ROO.h * (1 - shrink) / 2,
+      w: ROO.w * shrink,
+      h: ROO.h * shrink
+    };
+    let collided = false;
+    for (const o of obstacles) {
+      if (rectsOverlap(rb, o)) {
+        collided = true;
+        // Bounce instead of game over!
+        roo.vy *= -BOUNCE_DAMPING; // Reverse velocity with some damping for bounce
+        roo.y += roo.vy * dt; // Apply immediate bounce adjustment
+        roo.grounded = false;
+        break; // Only bounce off one at a time
+      }
+    }
+    if (collided) {
+      // Optional: Add a little sound or effect if you want later!
+    }
+  }
 
   function draw() {
     drawSky(); drawGround();
@@ -248,7 +452,7 @@
     // prefer image/canvas; else use existing procedural band if present
     const src = (loaded && img && (img.width || img.naturalWidth))
       ? img
-      : (layer==='back' ? bandBack : bandFront);
+      : (layer==='back' ? bandBack.canvas : bandFront.canvas);
     if (!src) return;
 
     const scale = h / src.height;
@@ -257,14 +461,13 @@
     const fade = FADE_W * scale;
     const repeatDist = tileW - fade;
     const blurBack = (layer==='back' && !BG_BACK_URL); // only blur if reusing front
-    let x = -((xOffset % repeatDist) + repeatDist);
+    let x = -((xOffset % repeatDist) + repeatDist) % repeatDist;
 
     for (let i=0; x < W + tileW; i++, x += repeatDist){
       if (blurBack){ ctx.filter='blur(1px) saturate(0.9)'; ctx.globalAlpha=0.95; }
       if (BG_MIRROR_TILING && (i % 2)){
-        ctx.save(); ctx.scale(-1,1);
-        ctx.drawImage(src, -(x + tileW), y, tileW, h);
-        ctx.restore();
+        // Use negative width for mirroring without scale
+        ctx.drawImage(src, x + tileW, y, -tileW, h);
       } else {
         ctx.drawImage(src, x, y, tileW, h);
       }
@@ -371,6 +574,7 @@
     gc.bezierCurveTo(cx + w*0.55, cy + h*0.35, cx + w*0.25, cy + h*0.5, cx, cy + h*0.45);
     gc.bezierCurveTo(cx - w*0.25, cy + h*0.5, cx - w*0.55, cy + h*0.35, cx - w/2, cy);
   }
+
   function mix(hex, hex2, t) {
     const a = parseInt(hex.slice(1),16), b = parseInt(hex2.slice(1),16);
     const r = (a>>16)&255, g=(a>>8)&255, bl=a&255;
@@ -378,6 +582,28 @@
     const rr = Math.round(r + (r2-r)*t), gg=Math.round(g+(g2-g)*t), bb=Math.round(bl+(bl2-bl)*t);
     return `#${((1<<24)+(rr<<16)+(gg<<8)+bb).toString(16).slice(1)}`;
   }
+
+  function addEdgeFades(c, fadeW) {
+    const gc = c.getContext('2d');
+    const gradL = gc.createLinearGradient(0, 0, fadeW, 0);
+    gradL.addColorStop(0, 'rgba(0,0,0,0)'); gradL.addColorStop(1, 'rgba(0,0,0,1)');
+    gc.fillStyle = gradL; gc.globalCompositeOperation = 'destination-out';
+    gc.fillRect(0, 0, fadeW, c.height);
+    const gradR = gc.createLinearGradient(c.width - fadeW, 0, c.width, 0);
+    gradR.addColorStop(0, 'rgba(0,0,0,1)'); gradR.addColorStop(1, 'rgba(0,0,0,0)');
+    gc.fillStyle = gradR;
+    gc.fillRect(c.width - fadeW, 0, fadeW, c.height);
+    gc.globalCompositeOperation = 'source-over';
+  }
+
+  function setupHud() {
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('howToBtn').addEventListener('click', () => document.getElementById('howToModal').style.display = 'grid');
+    document.getElementById('closeHowToBtn').addEventListener('click', () => document.getElementById('howToModal').style.display = 'none');
+    // Add game over logic if needed, but since we have bounce, maybe remove game over or trigger on multiple collisions
+    // For now, assuming bounce replaces game over
+  }
+
 })();
 </script>
 </body>
