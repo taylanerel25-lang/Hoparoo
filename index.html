@@ -9,7 +9,6 @@
     html, body { height: 100%; margin: 0; background:#0b0d10; color:#fff; overflow:hidden; font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans"; }
     canvas { display:block; width:100vw; height:100vh; touch-action:none; }
 
-    /* HUD / Splash */
     .hud { position:fixed; inset:0; pointer-events:none; }
     .score { position:fixed; top: calc(env(safe-area-inset-top) + 18px); right: 14px; font-size: 56px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
     .best { position:fixed; top: calc(env(safe-area-inset-top) + 28px); left:14px; font-size:16px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
@@ -35,7 +34,6 @@
 <body>
   <canvas id="game" aria-label="Hoparoo"></canvas>
 
-  <!-- HUD / Splash -->
   <div class="hud" aria-hidden="true">
     <div class="score"><span id="scoreHud">0</span></div>
     <div id="bestHud" class="best">Best: 0</div>
@@ -90,25 +88,23 @@
   const GROUND_RATIO = 0.78;
   const FADE_W = 128;
 
-  // Player size
   const ROO = { w: 130, h: 94 };
 
-  // === Player sprite ===
-  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Kangaroo?v=1';
-  const ROO_FRAMES = 8;
+  // === PLAYER SPRITE ===
+  const ROO_IMG_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Kangaroo.png';
+  const ROO_FRAMES = 1; // set to 8 if you later use a sprite sheet
   const ROO_IMG_OFFSET = { x: 0, y: 0 };
-  const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 };
+  const ROO_IMG_TILT = { up: -0.18, down: 0.22, max: 0.28 };
 
-  // === Trees / parallax ===
-  const BG_FRONT_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Trees.png?v=1';
-  const BG_BACK_URL  = '';
+  // === TREES / PARALLAX ===
+  const BG_FRONT_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/trees.png'; // lowercase!
+  const BG_BACK_URL = '';
   const BG_SCROLL = { back: 0.22, front: 0.55 };
-
-  const BG_CHROMA       = [0,0,0];
-  const BG_CHROMA_TOL   = 34;
+  const BG_CHROMA = [0,0,0];
+  const BG_CHROMA_TOL = 34;
   const BG_MIRROR_TILING = true;
 
-  const BOB = { amp: 28, freq: 6.8 }; // Smoother, bouncier hop
+  const BOB = { amp: 28, freq: 6.8 };
   const SPAWN_GAP = { min: 380, max: 720 };
   const SAFE_START_MS = 1200;
 
@@ -149,15 +145,15 @@
   let W = 0, H = 0, GROUND_Y = 0;
 
   // Assets
-  let rooImg=null, rooImgLoaded=false;
-  let bgBackImg=null, bgFrontImg=null, bgBackLoaded=false, bgFrontLoaded=false;
+  let rooImg = null, rooImgLoaded = false;
+  let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
 
   // Parallax state
   let bgBackX = 0, bgFrontX = 0;
   let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
   let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
 
-  // Tree palettes (richer, more realistic)
+  // Tree palettes
   const PALETTE_BACK = {
     leafLight: '#a8d5a8', leafMid: '#8ab88a', leafDark: '#6b9a6b',
     trunkLight: '#8c7a5e', trunkDark: '#5d4a36', shadow: 'rgba(0,0,0,0.12)'
@@ -169,20 +165,30 @@
 
   // Load assets
   async function loadImages(){
-    if (ROO_IMG_URL){
-      rooImg = await loadStripWithChroma(ROO_IMG_URL, BG_CHROMA, BG_CHROMA_TOL);
-      rooImgLoaded = true;
+    // Roo – no chroma key, keep original alpha
+    if (ROO_IMG_URL) {
+      try {
+        rooImg = await loadImage(ROO_IMG_URL);
+        rooImgLoaded = true;
+      } catch (e) {
+        console.warn("Kangaroo image failed to load – using fallback.", e);
+        rooImgLoaded = false;
+      }
     }
+
+    // Trees – keep chroma key
     if (BG_FRONT_URL) {
-      bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
-      addEdgeFades(bgFrontImg, FADE_W);
-      bgFrontLoaded = true;
+      try {
+        bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
+        addEdgeFades(bgFrontImg, FADE_W);
+        bgFrontLoaded = true;
+      } catch (e) {
+        console.warn("Front trees failed to load.", e);
+        bgFrontLoaded = false;
+      }
     }
-    if (BG_BACK_URL) {
-      bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
-      addEdgeFades(bgBackImg, FADE_W);
-      bgBackLoaded = true;
-    } else if (bgFrontImg) {
+
+    if (!bgBackLoaded && bgFrontImg) {
       bgBackImg = makeVariant(bgFrontImg, 0.94, 0.86);
       addEdgeFades(bgBackImg, FADE_W);
       bgBackLoaded = true;
@@ -211,7 +217,6 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
 
-    // Trees lowered to match kangaroo height
     BACK_H  = Math.floor(H * 0.28);
     FRONT_H = Math.floor(H * 0.40);
     backY   = GROUND_Y - BACK_H;
@@ -223,21 +228,24 @@
   resize();
 
   function buildBands() {
-    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.85, true); bandBack = b.canvas; bandBackW = b.w; addEdgeFades(bandBack, FADE_W); }
-    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.25, false); bandFront = f.canvas; bandFrontW = f.w; addEdgeFades(bandFront, FADE_W); }
+    if (!BG_BACK_URL && !bandBack) {
+      const b = createTreeBand(BACK_H, PALETTE_BACK, 0.85, true);
+      bandBack = b.canvas; bandBackW = b.w;
+      addEdgeFades(bandBack, FADE_W);
+    }
+    if (!BG_FRONT_URL && !bandFront) {
+      const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.25, false);
+      bandFront = f.canvas; bandFrontW = f.w;
+      addEdgeFades(bandFront, FADE_W);
+    }
   }
 
   // Game state
   const state = {
-    playing: false,
-    dead: false,
-    time: 0,
-    score: 0,
+    playing: false, dead: false, time: 0, score: 0,
     best: Number(localStorage.getItem('hoparoo_best')||0),
-    distSinceSpawn: 0,
-    nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
-    startedAt: 0,
-    justLanded: false,
+    distSinceSpawn: 0, nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
+    startedAt: 0, justLanded: false,
   };
   bestHud.textContent = `Best: ${state.best}`;
 
@@ -269,8 +277,8 @@
   }
   window.addEventListener('pointerdown', jump);
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); }
-    if (state.dead && (e.code === 'Space' || e.code === 'Enter')) doPlayAgain();
+    if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); jump(); }
+    if (state.dead && ['Space', 'Enter'].includes(e.code)) doPlayAgain();
   });
   document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
 
@@ -471,16 +479,23 @@
 
       const frameW = rooImg.width / ROO_FRAMES;
       const frameH = rooImg.height;
-      let frameIndex = roo.grounded ? Math.floor(roo.bobT % ROO_FRAMES) : (roo.vy < 0 ? 2 : 6);
+      let frameIndex = 0;
+      if (ROO_FRAMES > 1) {
+        const walk = Math.floor(roo.bobT * 8);
+        frameIndex = roo.grounded
+          ? (walk % ROO_FRAMES)
+          : (roo.vy < 0 ? Math.floor(ROO_FRAMES * 0.25) : Math.floor(ROO_FRAMES * 0.75));
+      }
       ctx.drawImage(rooImg, frameIndex * frameW, 0, frameW, frameH, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
 
       ctx.restore();
     } else {
-      ctx.fillStyle = '#22c55e';
-      roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
-      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18);
-      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);
-      ctx.fillRect(x - 14, y + 12, 14, 6);
+      // Fallback green roo
+      ctx.fillStyle = KANGAROO_COLOR;
+      roundedRect(x + 10, y + 6, ROO.w - 20, ROO.h - 6, 12); ctx.fill();
+      ctx.fillRect(x + ROO.w - 28, y - 10, 28, 28);
+      ctx.fillRect(x + ROO.w - 18, y - 25, 12, 18);
+      ctx.fillRect(x, y + 12, 18, 8);
     }
   }
 
@@ -499,9 +514,15 @@
   }
 
   function loadImage(url){
-    return new Promise((res, rej)=>{
-      const im = new Image(); im.crossOrigin='anonymous';
-      im.onload=()=>res(im); im.onerror=rej; im.src=url;
+    return new Promise((res, rej) => {
+      const im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = () => res(im);
+      im.onerror = (e) => {
+        console.error('Image failed to load:', url, e);
+        rej(e);
+      };
+      im.src = url;
     });
   }
 
@@ -527,7 +548,7 @@
   }
 
   function drawParallaxBand({ img, loaded, xOffset, y, h, layer }){
-    const src = (loaded && img && (img.width || img.naturalWidth)) ? img : (layer==='back' ? bandBack : bandFront);
+    const src = (loaded && img) ? img : (layer==='back' ? bandBack : bandFront);
     if (!src) return;
 
     const scale = h / src.height;
@@ -535,11 +556,10 @@
     const tileW = srcW * scale;
     const fade = FADE_W * scale;
     const repeatDist = tileW - fade;
-    const blurBack = (layer==='back' && !BG_BACK_URL);
     let x = -((xOffset % repeatDist) + repeatDist);
 
     for (let i=0; x < W + tileW; i++, x += repeatDist){
-      if (blurBack){ ctx.filter='blur(1.2px) saturate(0.88)'; ctx.globalAlpha=0.94; }
+      if (layer==='back' && !BG_BACK_URL){ ctx.filter='blur(1.2px) saturate(0.88)'; ctx.globalAlpha=0.94; }
       if (BG_MIRROR_TILING && (i % 2)){
         ctx.save(); ctx.scale(-1,1);
         ctx.drawImage(src, -(x + tileW), y, tileW, h);
@@ -547,7 +567,7 @@
       } else {
         ctx.drawImage(src, x, y, tileW, h);
       }
-      if (blurBack){ ctx.filter='none'; ctx.globalAlpha=1; }
+      if (layer==='back' && !BG_BACK_URL){ ctx.filter='none'; ctx.globalAlpha=1; }
     }
   }
 
@@ -581,12 +601,10 @@
       const cx = baseX;
       const cy = gyTop + height * (distant ? 0.32 : 0.25);
 
-      // Layered foliage
       paintFoliage(gc, cx, cy, spread, height * 0.65, pal, distant);
       paintFoliage(gc, cx + rng()*4 - 2, cy - height*0.08, spread*0.88, height*0.55, pal, distant);
       paintFoliage(gc, cx + rng()*6 - 3, cy - height*0.15, spread*0.75, height*0.45, pal, distant);
 
-      // Soft shadow under tree
       gc.save();
       gc.globalAlpha = distant ? 0.08 : 0.14;
       gc.filter = 'blur(1.2px)';
