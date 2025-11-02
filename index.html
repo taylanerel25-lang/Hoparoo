@@ -1,631 +1,1187 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
-  <title>Hoparoo</title>
-  <style>
-    :root{--accent:#22c55e;--panel:rgba(255,255,255,.92);--ink:#0b0d10}
-    html, body { height: 100%; margin: 0; background:#0b0d10; color:#fff; overflow:hidden; font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans"; }
-    canvas { display:block; width:100vw; height:100vh; touch-action:none; }
-
-    /* HUD / Splash */
-    .hud { position:fixed; inset:0; pointer-events:none; }
-    .score { position:fixed; top: calc(env(safe-area-inset-top) + 18px); right: 14px; font-size: 56px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
-    .best { position:fixed; top: calc(env(safe-area-inset-top) + 28px); left:14px; font-size:16px; color:#fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); z-index:3; user-select:none; }
-    .splash { position:fixed; inset:0; z-index:2; display:block; }
-    .splash-inner { position:absolute; left:50%; transform:translateX(-50%); top:10%; width:min(92%,360px); text-align:center; }
-    .title { font-size: 40px; font-weight: 1000; color:#fff; text-shadow:0 8px 24px rgba(0,0,0,.45); margin:0 0 6px; }
-    .subtitle { font-size:16px; opacity:.95 }
-    .panel { min-width:280px; max-width:90vw; background:var(--panel); color:#111; border-radius:18px; padding:16px; box-shadow:0 10px 40px rgba(0,0,0,.35); pointer-events:auto; }
-    .btn { appearance:none; border:0; background:#fff; color:#111; padding:10px 14px; border-radius:999px; font-weight:800; box-shadow:0 2px 8px rgba(0,0,0,.15); cursor:pointer; line-height:1; }
-    .btn:focus{ outline:3px solid #000; outline-offset:2px; }
-    .actions { display:grid; gap:10px; margin-top:12px; justify-items:center; }
-    .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.85); color: #fff; padding: 8px 12px; border-radius: 10px; font-size: 14px; pointer-events: none; opacity: 0; transition: opacity .25s ease, transform .25s ease; }
-    .toast.show { opacity: 1; transform: translate(-50%, -6px); }
-    .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.35); z-index:9999; }
-    .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-
-    @media (prefers-color-scheme: light) {
-      html,body{ background:#f3f5f7; color:#111; }
-      .title{color:#111; text-shadow:none;}
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainbow Flight - For the Triplet Superstars! 🌈✨</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB, #E0FFFF);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        canvas {
+            display: block;
+            border: 1px solid #000;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        #game-over, #char-select, #shop, #my-stuff, #my-house {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(255,255,255,0.95);
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: none;
+            width: 90%;
+            max-width: 300px;
+            overflow-y: auto;
+            max-height: 90vh;
+        }
+        #char-select {
+            flex-direction: column;
+            gap: 15px;
+            background: linear-gradient(135deg, #FFD700, #FF69B4, #87CEFA);
+            border: 4px solid #FFD700;
+        }
+        #char-select h2 {
+            margin: 0 0 15px 0;
+            font-size: 24px;
+            color: #333;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+        }
+        .char-btn {
+            background: rgba(255,255,255,0.9);
+            border: 3px solid #FFD700;
+            border-radius: 15px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .char-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(255,215,0,0.6);
+            background: rgba(255,255,255,1);
+        }
+        .char-preview {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #FFD700;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .char-placeholder {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid #FFD700;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        #game-over {
+            font-size: 36px;
+            color: red;
+        }
+        #restart-btn {
+            font-size: 20px;
+            padding: 8px 16px;
+            background: #FFD700;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        #restart-btn:hover { background: #FFA500; }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: #333;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+            user-select: none;
+        }
+        #coins {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            color: #333;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+            user-select: none;
+            display: flex;
+            align-items: center;
+        }
+        #jewellery {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            font-size: 24px;
+            color: #333;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+            user-select: none;
+            display: flex;
+            align-items: center;
+        }
+        #shop, #my-stuff, #my-house {
+            flex-direction: column;
+            gap: 10px;
+            background: linear-gradient(135deg, #FF69B4, #87CEFA, #FFD700);
+            border: 4px solid #FF69B4;
+        }
+        #shop h2, #my-stuff h2, #my-house h2 {
+            font-size: 28px;
+            color: #FF1493;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+        }
+        #shop h3, #my-stuff h3 {
+            font-size: 24px;
+            margin: 5px 0;
+            color: #4B0082;
+        }
+        #shop button, #my-stuff button, #my-house button {
+            background: #FFD700;
+            border: none;
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        #shop button:hover, #my-stuff button:hover, #my-house button:hover {
+            background: #FFA500;
+        }
+        #shop .close-btn, #my-stuff .close-btn, #my-house .close-btn {
+            background: #FF69B4; /* Pink color for close button */
+        }
+        #back-home {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 28px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #FF69B4, #FFD700);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            color: #333;
+            font-weight: bold;
+            display: none;
+        }
+        #back-home:hover {
+            transform: translateX(-50%) scale(1.05);
+        }
+        #dedication {
+            font-size: 20px;
+            color: #333;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+            margin-bottom: 15px;
+        }
+        #dedication emoji {
+            font-size: 2em;
+        }
+        @media (max-width: 400px) {
+            #char-select h2, #shop h2, #my-stuff h2, #my-house h2 {
+                font-size: 20px;
+            }
+            .char-btn {
+                font-size: 14px;
+                padding: 8px;
+                gap: 8px;
+            }
+            .char-preview, .char-placeholder {
+                width: 50px;
+                height: 50px;
+            }
+            #shop h3, #my-stuff h3 {
+                font-size: 18px;
+            }
+            #shop button, #my-stuff button, #my-house button {
+                font-size: 14px;
+                padding: 6px 12px;
+            }
+            #dedication {
+                font-size: 16px;
+            }
+            #score, #coins, #jewellery {
+                font-size: 20px;
+            }
+            #coin-display-img, #jewellery-display-img {
+                width: 30px;
+                height: 30px;
+            }
+        }
+        @media (orientation: landscape) {
+            #char-select {
+                gap: 10px;
+                padding: 15px;
+            }
+            .char-btn {
+                padding: 8px;
+                font-size: 16px;
+            }
+            #char-select h2 {
+                font-size: 22px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <canvas id="game" aria-label="Hoparoo"></canvas>
-
-  <!-- HUD / Splash -->
-  <div class="hud" aria-hidden="true">
-    <div class="score"><span id="scoreHud">0</span></div>
-    <div id="bestHud" class="best">Best: 0</div>
-    <div id="splash" class="splash">
-      <div class="splash-inner">
-        <div class="title">Hoparoo</div>
-        <div class="subtitle">Tap to jump • Dodge the outback</div>
-        <div style="margin-top:12px; display:grid; gap:10px; justify-items:center; pointer-events:auto;">
-          <button id="startBtn" class="btn" style="background:var(--accent); color:#04130a;">Play</button>
-          <button id="howToBtn" class="btn">How to Play</button>
+<div id="score">Score: 0</div>
+<div id="coins"><img id="coin-display-img" src="" style="width: 40px; height: 40px; margin-right: 10px;"><span id="coin-count">0</span></div>
+<div id="jewellery"><img id="jewellery-display-img" src="" style="width: 40px; height: 40px; margin-right: 10px;"><span id="jewellery-count">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="char-select">
+        <div id="dedication">A game for you! made by your uncle Tay Tay <span style="font-size: 2em;">👮‍♂️</span></div>
+        <h2>🌈 Choose Your Superstar! ✨</h2>
+        <button class="char-btn" onclick="selectCharacter(0)">
+            <img class="char-preview" src="Alayna.png" alt="Alayna" onerror="this.style.display='none'; this.nextSibling.style.display='block';">
+            <div class="char-placeholder" style="background-color: #dda0dd; display: none;"></div>
+            <span>🚀 Alayna! 💜</span>
+        </button>
+        <button class="char-btn" onclick="selectCharacter(1)">
+            <img class="char-preview" src="Jazmine.png" alt="Jazmine" onerror="this.style.display='none'; this.nextSibling.style.display='block';">
+            <div class="char-placeholder" style="background-color: #ffc0cb; display: none;"></div>
+            <span>🌟 Jazmine! 💕</span>
+        </button>
+        <button class="char-btn" onclick="selectCharacter(2)">
+            <img class="char-preview" src="Lilah.png" alt="Lilah" onerror="this.style.display='none'; this.nextSibling.style.display='block';">
+            <div class="char-placeholder" style="background-color: #87cefa; display: none;"></div>
+            <span>⭐ Lilah! 💙</span>
+        </button>
+        <button class="char-btn" onclick="selectCharacter(3)">
+            <img class="char-preview" src="Louisa.png" alt="Louisa" onerror="this.style.display='none'; this.nextSibling.style.display='block';">
+            <div class="char-placeholder" style="background-color: #ffc0cb; display: none;"></div>
+            <span>🚀 Louisa! 💕</span>
+        </button>
+        <button class="char-btn" onclick="selectCharacter(4)">
+            <img class="char-preview" src="Julia.png" alt="Julia" onerror="this.style.display='none'; this.nextSibling.style.display='block';">
+            <div class="char-placeholder" style="background-color: #dda0dd; display: none;"></div>
+            <span>🌟 Julia! 💜</span>
+        </button>
+        <button class="char-btn" onclick="openShop()">
+            <span>Shop 🛍️</span>
+        </button>
+        <button class="char-btn" onclick="openMyStuff()">
+            <span>My Stuff 🎒</span>
+        </button>
+        <button class="char-btn" onclick="openMyHouse()">
+            <span>My House 🏠</span>
+        </button>
+    </div>
+    <div id="shop">
+        <h2>Kid-Friendly Shop! 🛍️</h2>
+        <p>Your Coins: <span id="shop-coins">0</span> 💰</p>
+        <div>
+            <h3>Fluffy Kitten</h3>
+            <img id="kitten-preview" src="ChatGPT Image Nov 2, 2025, 01_40_49 PM.png" alt="Fluffy Kitten" style="width: 100px; height: 100px; border-radius: 10px;">
+            <p id="kitten-cost"><img id="coin-icon" src="" style="width: 20px; height: 20px;"> 50</p>
+            <button onclick="buyKitten()">Buy! 😻</button>
         </div>
-      </div>
+        <div>
+            <h3>Cute Puppy</h3>
+            <img id="puppy-preview" src="ChatGPT Image Nov 2, 2025, 02_17_17 PM.png" alt="Cute Puppy" style="width: 100px; height: 100px; border-radius: 10px;">
+            <p id="puppy-cost"><img id="coin-icon2" src="" style="width: 20px; height: 20px;"> 50</p>
+            <button onclick="buyPuppy()">Buy! 🐶</button>
+        </div>
+        <div>
+            <h3>Princess Crown</h3>
+            <img id="crown-preview" src="Crown.png" alt="Princess Crown" style="width: 100px; height: 100px; border-radius: 10px;">
+            <p id="crown-cost"><img id="coin-icon3" src="" style="width: 20px; height: 20px;"> 50</p>
+            <button onclick="buyCrown()">Buy! 👑</button>
+        </div>
+        <button class="close-btn" onclick="closeShop()">Close</button>
     </div>
-  </div>
-
-  <div id="gameOver" class="hud" style="display:none;">
-    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="overTitle" style="position:absolute; left:50%; top:45%; transform:translate(-50%,-50%);">
-      <h2 id="overTitle" style="margin:0 0 8px; text-align:center;">Game Over</h2>
-      <div style="display:flex; justify-content:space-between; font-size:18px; padding:6px 0;"><span>Your Score</span><strong id="scoreNow">0</strong></div>
-      <div style="display:flex; justify-content:space-between; font-size:18px; padding:6px 0;"><span>Best</span><strong id="bestNow">0</strong></div>
-      <div class="actions">
-        <button id="againBtn" class="btn">Play Again</button>
-        <button id="shareBtn" class="btn">Share</button>
-      </div>
+    <div id="my-stuff">
+        <h2>My Stuff! 🎒</h2>
+        <div id="inventory-list"></div>
+        <button class="close-btn" onclick="closeMyStuff()">Close</button>
     </div>
-  </div>
-
-  <div id="howToModal" class="modal" role="dialog" aria-modal="true">
-    <div class="panel" style="text-align:left;">
-      <h3 style="margin:0 0 8px; text-align:center;">How to Play</h3>
-      <p style="margin:0; line-height:1.45; font-size:15px;">
-        • Roo runs automatically to the right<br>
-        • Tap anywhere to jump<br>
-        • Jump over obstacles on the ground<br>
-        • Hitting anything ends the run — quick restart, go again
-      </p>
-      <div class="actions"><button id="closeHowToBtn" class="btn">Close</button></div>
+    <div id="my-house">
+        <h2>My House! 🏠</h2>
+        <p>Welcome to your empty house! Collect items to decorate it.</p>
+        <button class="close-btn" onclick="closeMyHouse()">Close</button>
     </div>
-  </div>
-
-  <div id="aria" class="sr-only" aria-live="polite"></div>
-  <div id="toast" class="toast" role="status"></div>
-
-<script>
-(() => {
-  'use strict';
-
-  // ======= TWEAK ZONE =======
-  const RUN_SPEED = 300;
-  const GRAVITY = 2200;
-  const JUMP_VELOCITY = -700; // Lower jumps for a chill vibe
-  const GROUND_RATIO = 0.78;
-  const FADE_W = 128; // Boosted fade for smoother tree blending—no more awkward seams!
-
-  // Player size (logical hitbox), image will be scaled to this
-  const ROO = { w: 96, h: 69 }; // Bigger kangaroo for that star power!
-
-  // Optional fine-tune for sprite draw relative to the hitbox
-  // === Player sprite ===
-  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Kangaroo?v=1';          // Exact name from your repo (no .png)
-  const ROO_IMG_OFFSET = { x: 0, y: 0 };     // tweak feet alignment (+y = lower)
-  const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 }; // radians
-
-  // === Trees / parallax ===
-  const BG_FRONT_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Trees.png?v=1';          // foreground treeline
-  const BG_BACK_URL  = '';                   // leave blank to auto-derive back layer
-  const BG_SCROLL = { back: 0.22, front: 0.55 };
-
-  // Remove black from trees.png
-  const BG_CHROMA       = [0,0,0];
-  const BG_CHROMA_TOL   = 34;                // raised for smoother edges
-  const BG_MIRROR_TILING = true;             // Enabled for variety and better seam hiding
-
-  const BOB = { amp: 24, freq: 5.5 }; // boosted for more hop-like animation
-  const SPAWN_GAP = { min: 380, max: 720 };
-  const SAFE_START_MS = 1200;
-
-  const SKY = ['#78c6ff', '#d9f0ff'];
-  const GROUND_COLOR = '#2e3a45';
-  const KANGAROO_COLOR = '#22c55e'; // fallback if image missing
-
-  const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa'];
-  const OBSTACLE_TYPES = [
-    { name: 'rock',   w: 38, h: 34 },
-    { name: 'emu',    w: 28, h: 62 },
-    { name: 'roo',    w: 52, h: 42 },
-  ];
-
-  const BOUNCE_DAMPING = 0.7; // For fun bounces on collision
-
-  // Parallax backgrounds (images optional; realistic fallback built-in)
-  // ======= /TWEAK ZONE =======
-
-  // DOM refs
-  const splashEl = document.getElementById('splash');
-  const startBtn = document.getElementById('startBtn');
-  const howToBtn = document.getElementById('howToBtn');
-  const howToModal = document.getElementById('howToModal');
-  const closeHowToBtn = document.getElementById('closeHowToBtn');
-  const gameOverEl = document.getElementById('gameOver');
-  const scoreNow = document.getElementById('scoreNow');
-  const bestNow = document.getElementById('bestNow');
-  const againBtn = document.getElementById('againBtn');
-  const shareBtn = document.getElementById('shareBtn');
-  const hudScore = document.getElementById('scoreHud');
-  const bestHud = document.getElementById('bestHud');
-  const toast = document.getElementById('toast');
-
-  // Canvas
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-
-  let W = 0, H = 0, GROUND_Y = 0;
-
-  // Player sprite
-  let rooImg=null, rooImgLoaded=false;
-  let bgBackImg=null, bgFrontImg=null, bgBackLoaded=false, bgFrontLoaded=false;
-
-  // Parallax state
-  let bgBackX = 0, bgFrontX = 0;
-  let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
-  let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
-
-  // Palettes for procedural trees
-  const PALETTE_BACK = {
-    leafLight: '#8fbf9a', leafMid: '#78aa87', leafDark: '#5f8f6c',
-    trunkLight: '#7e6a48', trunkDark: '#5a4732', haze: 'rgba(255,255,255,0.10)'
-  };
-  const PALETTE_FRONT = {
-    leafLight: '#3f7f52', leafMid: '#2f6a41', leafDark: '#1f4a2c',
-    trunkLight: '#6c543b', trunkDark: '#4a3824', haze: 'rgba(255,255,255,0.05)'
-  };
-
-  // Load assets
-  async function loadImages(){
-    // Player
-    if (ROO_IMG_URL){
-      rooImg = await loadStripWithChroma(ROO_IMG_URL, BG_CHROMA, BG_CHROMA_TOL);
-      rooImgLoaded = true;
-    }
-
-    // Trees with one-time chroma-key
-    if (BG_FRONT_URL) {
-      bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
-      addEdgeFades(bgFrontImg, FADE_W);
-      bgFrontLoaded = true;
-    }
-    if (BG_BACK_URL) {
-      bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
-      addEdgeFades(bgBackImg, FADE_W);
-      bgBackLoaded = true;
-    } else if (bgFrontImg) {
-      bgBackImg = makeVariant(bgFrontImg, 0.96, 0.88); // lighter, less saturated
-      addEdgeFades(bgBackImg, FADE_W);
-      bgBackLoaded = true;
-    }
-  }
-  loadImages();
-
-  function addEdgeFades(c, fadeW) {
-    if (c.width < fadeW * 2) return; // too small, skip
-    const g = c.getContext('2d');
-    g.globalCompositeOperation = 'destination-out';
-    // Left fade
-    const leftGrad = g.createLinearGradient(0, 0, fadeW, 0);
-    leftGrad.addColorStop(0, '#000'); // full erase
-    leftGrad.addColorStop(1, 'transparent');
-    g.fillStyle = leftGrad;
-    g.fillRect(0, 0, fadeW, c.height);
-    // Right fade
-    const rightGrad = g.createLinearGradient(c.width - fadeW, 0, c.width, 0);
-    rightGrad.addColorStop(0, '#000');
-    rightGrad.addColorStop(1, 'transparent');
-    g.fillStyle = rightGrad;
-    g.fillRect(c.width - fadeW, 0, fadeW, c.height);
-    g.globalCompositeOperation = 'source-over';
-  }
-
-  function resize() {
-    W = Math.floor(window.innerWidth);
-    H = Math.floor(window.innerHeight);
-    canvas.width = Math.floor(W * DPR);
-    canvas.height = Math.floor(H * DPR);
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    GROUND_Y = Math.floor(H * GROUND_RATIO);
-
-    BACK_H  = Math.floor(H * 0.3); // lowered more
-    FRONT_H = Math.floor(H * 0.45); // lowered more
-    backY   = GROUND_Y - BACK_H;
-    frontY  = GROUND_Y - FRONT_H;
-
-    buildBands();
-  }
-  window.addEventListener('resize', resize, { passive: true });
-  resize();
-
-  function buildBands() {
-    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.9, true); bandBack = b.canvas; bandBackW = b.w; addEdgeFades(bandBack, FADE_W); }
-    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.2, false); bandFront = f.canvas; bandFrontW = f.w; addEdgeFades(bandFront, FADE_W); }
-  }
-
-  // Game state
-  const state = {
-    playing: false,
-    dead: false,
-    time: 0,
-    score: 0,
-    best: Number(localStorage.getItem('hoparoo_best')||0),
-    distSinceSpawn: 0,
-    nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
-    startedAt: 0,
-  };
-  bestHud.textContent = `Best: ${state.best}`;
-
-  // Roo
-  const roo = { x: Math.max(80, W * 0.18), y: 0, vy: 0, grounded: true, bobT: 0 };
-  function placeRooOnGround() { roo.y = GROUND_Y - ROO.h; roo.vy = 0; roo.grounded = true; }
-  placeRooOnGround();
-
-  // Obstacles
-  const obstacles = [];
-  function spawnObstacle() {
-    const t = OBSTACLE_TYPES[(Math.random() * OBSTACLE_TYPES.length) | 0];
-    const color = OBSTACLE_COLORS[(Math.random() * OBSTACLE_COLORS.length) | 0];
-    const h = t.h; const w = t.w; const y = GROUND_Y - h; const x = W + rand(12, 48);
-    obstacles.push({ x, y, w, h, type: t.name, color, scored: false });
-  }
-
-  // Input
-  function jump() {
-    if (state.dead) return;
-    if (!state.playing) { startGame(); return; }
-    if (roo.grounded) { roo.vy = JUMP_VELOCITY; roo.grounded = false; }
-  }
-  window.addEventListener('pointerdown', jump);
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); }
-    if (state.dead && (e.code === 'Space' || e.code === 'Enter')) doPlayAgain();
-  });
-  document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
-
-  function startGame() {
-    state.playing = true; state.dead = false; state.time = 0; state.score = 0;
-    state.distSinceSpawn = 0; state.nextGap = rand(SPAWN_GAP.min, SPAWN_GAP.max); state.startedAt = performance.now();
-    obstacles.length = 0; placeRooOnGround();
-    hudScore.textContent = '0';
-    splashEl.style.display = 'none';
-    gameOverEl.style.display = 'none';
-  }
-
-  function gameOver() {
-    state.dead = true; state.playing = false;
-    state.best = Math.max(state.best, state.score);
-    localStorage.setItem('hoparoo_best', String(state.best));
-    bestHud.textContent = `Best: ${state.best}`;
-    scoreNow.textContent = `${state.score}`;
-    bestNow.textContent = `${state.best}`;
-    setTimeout(() => { gameOverEl.style.display = ''; }, 150);
-  }
-
-  function doPlayAgain(){
-    gameOverEl.style.display = 'none';
-    splashEl.style.display = '';
-    state.dead = false; state.playing = false; state.score = 0;
-    obstacles.length = 0; placeRooOnGround(); hudScore.textContent = '0';
-  }
-
-  startBtn.addEventListener('click', startGame);
-  howToBtn.addEventListener('click', () => { howToModal.style.display = 'grid'; });
-  closeHowToBtn.addEventListener('click', () => { howToModal.style.display = 'none'; });
-  howToModal.addEventListener('click', (e) => { if (e.target === howToModal) howToModal.style.display = 'none'; });
-  againBtn.addEventListener('click', doPlayAgain);
-  shareBtn.addEventListener('click', async () => {
-    const text = `I scored ${state.score} in Hoparoo!`;
-    try { if (navigator.share) await navigator.share({ text, title: 'Hoparoo' }); else { await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); } } catch {}
-  });
-
-  function showToast(msg){ toast.textContent = msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=> toast.classList.remove('show'), 1200); }
-
-  // Main loop
-  let lastTime = performance.now();
-  function loop(now) {
-    const rawDt = (now - lastTime) / 1000; lastTime = now; const dt = Math.min(0.033, Math.max(0.001, rawDt));
-    update(dt); draw(); requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-
-  function update(dt) {
-    // Parallax motion
-    bgBackX  += RUN_SPEED * BG_SCROLL.back  * dt;
-    bgFrontX += RUN_SPEED * BG_SCROLL.front * dt;
-
-    hudScore.textContent = `${state.score}`;
-
-    if (state.playing && (performance.now() - state.startedAt) > SAFE_START_MS) {
-      state.distSinceSpawn += RUN_SPEED * dt;
-      if (state.distSinceSpawn >= state.nextGap) {
-        spawnObstacle(); state.distSinceSpawn = 0;
-        const ramp = Math.max(0.6, 1 - state.score / 2000);
-        state.nextGap = rand(SPAWN_GAP.min * ramp, SPAWN_GAP.max * ramp);
-      }
-    }
-
-    for (let i = obstacles.length - 1; i >= 0; i--) {
-      const o = obstacles[i];
-      if (state.playing) o.x -= RUN_SPEED * dt;
-      if (o.x + o.w < -20) obstacles.splice(i, 1);
-      if (state.playing && o.x + o.w < roo.x && !o.scored) {
-        state.score += 1;
-        o.scored = true;
-      }
-    }
-
-    if (state.playing) {
-      if (!roo.grounded) {
-        roo.vy += GRAVITY * dt; roo.y += roo.vy * dt;
-        if (roo.y >= GROUND_Y - ROO.h) { placeRooOnGround(); }
-      } else {
-        roo.bobT += dt * BOB.freq;
-      }
-      // Slightly forgiving hitbox
-      const shrink = 0.86;
-      const rb = {
-        x: roo.x + (ROO.w * (1 - shrink)) / 2,
-        y: roo.y + (ROO.h * (1 - shrink)) / 2,
-        w: ROO.w * shrink,
-        h: ROO.h * shrink
-      };
-      let collided = false;
-      for (const o of obstacles) {
-        if (rectsOverlap(rb, o)) {
-          collided = true;
-          // Bounce instead of game over!
-          roo.vy *= -BOUNCE_DAMPING; // Reverse velocity with some damping for bounce
-          roo.y += roo.vy * dt; // Apply immediate bounce adjustment
-          roo.grounded = false;
-          break; // Only bounce off one at a time
+    <div id="game-over">
+        Oh no! Splash! 💦<br>
+        Final Score: <span id="final-score">0</span><br>
+        <button id="restart-btn" onclick="restartGame()">Play Again! 🚀</button>
+    </div>
+    <button id="back-home" onclick="restartGame()">Back Home 🏠</button>
+    <!-- Audio elements - Add your fun files here! -->
+    <audio id="bgMusic" loop preload="auto"></audio>
+    <audio id="flapSound">
+        <source src="flap-sound.mp3" type="audio/mpeg"> <!-- Wing flap whoosh! -->
+    </audio>
+    <audio id="coinSound" preload="auto">
+        <source src="retro-coin-3-236679.mp3" type="audio/mpeg">
+    </audio>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // Audio hooks
+        const bgMusic = document.getElementById('bgMusic');
+        const flapSound = document.getElementById('flapSound');
+        const coinSound = document.getElementById('coinSound');
+        const characterMusic = [
+            'HUNTRIX - What It Sounds Like (Lyrics) KPop Demon Hunters.mp3',
+            'html headtitle410 Gonetitlehead body centerh1410 Goneh1center hrcenternginx1.24.0 (Ubuntu)center body html.mp3',
+            'HUNTRIX - What It Sounds Like (Lyrics) KPop Demon Hunters.mp3',
+            'HUNTRIX - What It Sounds Like (Lyrics) KPop Demon Hunters.mp3',
+            'html headtitle410 Gonetitlehead body centerh1410 Goneh1center hrcenternginx1.24.0 (Ubuntu)center body html.mp3'
+        ];
+        // Core tuning (tweaked for easier play)
+        const gravity = 0.5; // A bit heavier for satisfying jumps
+        const jumpStrength = -15; // Even bigger leap for easier dodging!
+        const gameSpeed = 2; // Slower scroll for chill racing vibe
+        const waterHeightRatio = 0.25;
+        const waveAmplitude = 26;
+        const waveFrequency = 0.015;
+        const beatSpeed = 0.008;
+        // Runtime state
+        let waterHeight = canvas.height * waterHeightRatio;
+        let waveOffset = 0;
+        let beatPhase = 0;
+        let score = 0;
+        let coins = localStorage.getItem('coins') ? parseInt(localStorage.getItem('coins')) : 0;
+        let jewellery = localStorage.getItem('jewellery') ? parseInt(localStorage.getItem('jewellery')) : 0;
+        let inventory = localStorage.getItem('inventory') ? JSON.parse(localStorage.getItem('inventory')) : [];
+        let equippedPet = localStorage.getItem('equippedPet') || null;
+        let equippedAccessory = localStorage.getItem('equippedAccessory') || null;
+        let gameOver = false;
+        let selectedIndex = -1;
+        let animationId = null;
+        let musicUnlockHandler = null;
+        let obstacleColor = '#000000'; // Default, set per character
+        const characters = [
+            { name: 'Alayna', x: 0, y: 0, vy: 0, image: new Image(), ready: false, placeholder: '#dda0dd' },
+            { name: 'Jazmine', x: 0, y: 0, vy: 0, image: new Image(), ready: false, placeholder: '#ffc0cb' },
+            { name: 'Lilah', x: 0, y: 0, vy: 0, image: new Image(), ready: false, placeholder: '#87cefa' },
+            { name: 'Louisa', x: 0, y: 0, vy: 0, image: new Image(), ready: false, placeholder: '#ffc0cb' },
+            { name: 'Julia', x: 0, y: 0, vy: 0, image: new Image(), ready: false, placeholder: '#dda0dd' }
+        ];
+        characters[0].image.src = 'Alayna.png';
+        characters[1].image.src = 'Jazmine.png';
+        characters[2].image.src = 'Lilah.png';
+        characters[3].image.src = 'Louisa.png';
+        characters[4].image.src = 'Julia.png';
+        const charSize = 60; // Back to original for single char focus
+        const wingSize = 25;
+        let jumpingPressed = false;
+        let jumpingPressedPrev = false;
+        let obstacles = [];
+        let coinsList = [];
+        let jewelleryList = [];
+        let obstacleSpawnTimer = 0;
+        let coinSpawnTimer = 0;
+        let jewellerySpawnTimer = 0;
+        const obstacleInterval = 150; // More frequent for excitement
+        const coinInterval = 200; // Coins a bit less frequent
+        const jewelleryInterval = coinInterval * 5; // Rare: ~1 every 5 coins
+        const obstacleSize = 75; // Big hearts!
+        const coinSize = 40; // Golden coins
+        const jewellerySize = 40; // Jewellery size
+        const petSize = 50; // Size for equipped pet
+        const crownSize = 30; // Small size for crown to fit on head
+        let jewelleryImage = new Image();
+        jewelleryImage.src = 'ChatGPT Image Nov 2, 2025, 01_11_08 PM.png';
+        let jewelleryReady = false;
+        let jewellerySrc = '';
+        let coinImage = new Image();
+        coinImage.src = 'ChatGPT Image Nov 2, 2025, 01_25_25 PM.png';
+        let coinReady = false;
+        let coinSrc = '';
+        let kittenImage = new Image();
+        kittenImage.src = 'ChatGPT Image Nov 2, 2025, 01_40_49 PM.png';
+        let kittenReady = false;
+        let kittenSrc = '';
+        let puppyImage = new Image();
+        puppyImage.src = 'ChatGPT Image Nov 2, 2025, 02_17_17 PM.png';
+        let puppyReady = false;
+        let puppySrc = '';
+        let crownImage = new Image();
+        crownImage.src = 'Crown.png';
+        let crownReady = false;
+        let crownSrc = '';
+        function processImage(img, index, callback, autoRemoveBg = false) {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            tempCtx.drawImage(img, 0, 0);
+            let imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+            let data = imageData.data;
+            let bgR = 0, bgG = 0, bgB = 0;
+            if (autoRemoveBg) {
+                bgR = data[0];
+                bgG = data[1];
+                bgB = data[2];
+            }
+            // Remove background
+            for (let i = 0; i < data.length; i += 4) {
+                if (autoRemoveBg) {
+                    if (Math.abs(data[i] - bgR) < 30 && Math.abs(data[i + 1] - bgG) < 30 && Math.abs(data[i + 2] - bgB) < 30) {
+                        data[i + 3] = 0; // Make transparent
+                    }
+                } else {
+                    if (data[i] < 5 && data[i + 1] < 5 && data[i + 2] < 5) {
+                        data[i + 3] = 0; // Make transparent for black bg
+                    }
+                }
+            }
+            tempCtx.putImageData(imageData, 0, 0);
+            // Find bounding box of non-transparent pixels
+            let minX = img.width, minY = img.height, maxX = 0, maxY = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] > 0) {
+                    const x = (i / 4) % img.width;
+                    const y = Math.floor((i / 4) / img.width);
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+            if (minX > maxX || minY > maxY) {
+                // No non-transparent pixels? Fallback to original
+                return callback(img);
+            }
+            const cropWidth = maxX - minX + 1;
+            const cropHeight = maxY - minY + 1;
+            // Make square by padding with transparent space to preserve aspect ratio
+            const side = Math.max(cropWidth, cropHeight);
+            const newCanvas = document.createElement('canvas');
+            newCanvas.width = side;
+            newCanvas.height = side;
+            const newCtx = newCanvas.getContext('2d');
+            const offsetX = (side - cropWidth) / 2;
+            const offsetY = (side - cropHeight) / 2;
+            newCtx.drawImage(tempCanvas, minX, minY, cropWidth, cropHeight, offsetX, offsetY, cropWidth, cropHeight);
+            // Create new image from processed canvas
+            const newImg = new Image();
+            newImg.src = newCanvas.toDataURL('image/png');
+            newImg.onload = () => {
+                callback(newImg);
+                // Update the preview img src too if index valid
+                if (index >= 0) {
+                    const previews = document.querySelectorAll('.char-btn img.char-preview');
+                    if (previews[index]) {
+                        previews[index].src = newImg.src;
+                    }
+                }
+            };
         }
-      }
-      if (collided) {
-        // Optional: Add a little sound or effect if you want later!
-      }
-    }
-  }
-
-  function draw() {
-    drawSky(); drawGround();
-    for (const o of obstacles) drawObstacle(o);
-    drawRoo();
-  }
-
-  function drawSky() {
-    // Blue sky
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-
-    // Clouds
-    const t = performance.now() * 0.00006;
-    ctx.globalAlpha = 0.14;
-    for (let i = 0; i < 10; i++) {
-      const cx = ((i * 311) - (t * 900)) % (W + 220) - 110;
-      const cy = 40 + (i * 53) % (GROUND_Y * 0.6);
-      const rw = 160 + (i % 3) * 60, rh = 40 + (i % 2) * 12;
-      roundedRect(cx, cy, rw, rh, 20); ctx.fillStyle = '#ffffff'; ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // Parallax bands
-    drawParallaxBand({ img: bgBackImg, loaded: bgBackLoaded, xOffset: bgBackX, y: backY, h: BACK_H, layer: 'back' });
-    drawParallaxBand({ img: bgFrontImg, loaded: bgFrontLoaded, xOffset: bgFrontX, y: frontY, h: FRONT_H, layer: 'front' });
-  }
-
-  function drawGround() {
-    ctx.fillStyle = GROUND_COLOR; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    const dashW = 32, dashH = 3, gap = 20;
-    const offset = -((performance.now() * RUN_SPEED * 0.002) % (dashW + gap));
-    ctx.globalAlpha = 0.35; ctx.fillStyle = '#9ca3af';
-    for (let x = offset; x < W + dashW; x += dashW + gap) ctx.fillRect(x, GROUND_Y + 18, dashW, dashH);
-    ctx.globalAlpha = 1;
-  }
-
-  function drawObstacle(o) {
-    ctx.fillStyle = o.color;
-    if (o.type === 'emu') {
-      ctx.fillRect(o.x, o.y, o.w, o.h - 12);
-      ctx.fillRect(o.x + o.w - 12, o.y - 8, 12, 12);
-    } else if (o.type === 'roo') {
-      roundedRect(o.x, o.y + 6, o.w, o.h - 6, 8); ctx.fill();
-      ctx.fillRect(o.x + o.w - 10, o.y - 6, 10, 12);
-    } else {
-      roundedRect(o.x, o.y + 8, o.w, o.h - 8, 6); ctx.fill();
-    }
-  }
-
-  function drawRoo(){
-    const sinVal = Math.sin(roo.bobT);
-    const bobOffset = (roo.grounded ? -sinVal * BOB.amp : 0);
-    const x = roo.x, y = roo.y + bobOffset;
-
-    // shadow
-    ctx.save();
-    ctx.globalAlpha = 0.28; ctx.filter='blur(1px)';
-    ctx.beginPath(); ctx.ellipse(x + ROO.w*0.5, GROUND_Y - 2, ROO.w*0.42, 3, 0, 0, Math.PI*2);
-    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fill(); ctx.restore();
-
-    if (rooImgLoaded && rooImg){
-      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : (-sinVal * 0.12);
-      let scaleX = 1;
-      let scaleY = 1;
-      if (roo.grounded) {
-        scaleY = 1 + sinVal * 0.15; // boosted squash/stretch for hop feel
-        scaleX = 1 - sinVal * 0.08;
-      } else {
-        const stretchFactor = Math.abs(roo.vy) / 500; // normalize based on velocity
-        scaleY = 1 - stretchFactor * 0.15;
-        scaleX = 1 + stretchFactor * 0.05;
-        if (roo.vy < 0) { // rising
-          scaleY = 1 + stretchFactor * 0.15;
-          scaleX = 1 - stretchFactor * 0.05;
+        function detachMusicUnlock() {
+            if (!musicUnlockHandler) return;
+            window.removeEventListener('pointerdown', musicUnlockHandler);
+            window.removeEventListener('touchstart', musicUnlockHandler);
+            musicUnlockHandler = null;
         }
-      }
-      ctx.save();
-      const cx = x + ROO.w/2, cy = y + ROO.h/2;
-      ctx.translate(cx, cy);
-      ctx.scale(scaleX, scaleY);
-      ctx.rotate(clamp(tilt, -ROO_IMG_TILT.max, ROO_IMG_TILT.max));
-      ctx.drawImage(rooImg, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
-      ctx.restore();
-    } else {
-      // fallback blocky roo
-      ctx.fillStyle = '#22c55e';
-      roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
-      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18);
-      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);
-      ctx.fillRect(x - 14, y + 12, 14, 6);
-    }
-  }
-
-  // ===== Utils =====
-  function rand(min, max) { return min + Math.random() * (max - min); }
-  function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
-  function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
-  function roundedRect(x, y, w, h, r) {
-    const rr = Math.min(r, w/2, h/2); ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.lineTo(x + w - rr, y); ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
-    ctx.lineTo(x + w, y + h - rr); ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-    ctx.lineTo(x + rr, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
-    ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
-  }
-
-  function loadImage(url){
-    return new Promise((res, rej)=>{
-      const im = new Image(); im.crossOrigin='anonymous';
-      im.onload=()=>res(im); im.onerror=rej; im.src=url;
-    });
-  }
-
-  // Chroma-key near-black pixels to transparent
-  async function loadStripWithChroma(url, keyRGB, tol){
-    const img = await loadImage(url);
-    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-    const g = c.getContext('2d', { willReadFrequently:true });
-    g.drawImage(img, 0, 0);
-    const d = g.getImageData(0,0,c.width,c.height), a = d.data;
-    const [kr,kg,kb] = keyRGB;
-    for (let i=0;i<a.length;i+=4){
-      const r=a[i], gg=a[i+1], b=a[i+2];
-      if (Math.abs(r-kr)<tol && Math.abs(gg-kg)<tol && Math.abs(b-kb)<tol) a[i+3]=0;
-    }
-    g.putImageData(d,0,0);
-    return c; // canvas usable by drawImage
-  }
-
-  function makeVariant(srcCanvas, brightness=1, saturation=1){
-    const c = document.createElement('canvas'); c.width=srcCanvas.width; c.height=srcCanvas.height;
-    const g = c.getContext('2d'); g.filter=`brightness(${brightness}) saturate(${saturation})`;
-    g.drawImage(srcCanvas,0,0); return c;
-  }
-
-  // Parallax bands (image or procedural)
-  function drawParallaxBand({ img, loaded, xOffset, y, h, layer }){
-    // prefer image/canvas; else use existing procedural band if present
-    const src = (loaded && img && (img.width || img.naturalWidth))
-      ? img
-      : (layer==='back' ? bandBack : bandFront);
-    if (!src) return;
-
-    const scale = h / src.height;
-    const srcW = src.width;
-    const tileW = srcW * scale;
-    const fade = FADE_W * scale;
-    const repeatDist = tileW - fade;
-    const blurBack = (layer==='back' && !BG_BACK_URL); // only blur if reusing front
-    let x = -((xOffset % repeatDist) + repeatDist);
-
-    for (let i=0; x < W + tileW; i++, x += repeatDist){
-      if (blurBack){ ctx.filter='blur(1px) saturate(0.9)'; ctx.globalAlpha=0.95; }
-      if (BG_MIRROR_TILING && (i % 2)){
-        ctx.save(); ctx.scale(-1,1);
-        ctx.drawImage(src, -(x + tileW), y, tileW, h);
-        ctx.restore();
-      } else {
-        ctx.drawImage(src, x, y, tileW, h);
-      }
-      if (blurBack){ ctx.filter='none'; ctx.globalAlpha=1; }
-    }
-  }
-
-  function createTreeBand(h, pal, density = 1.0, distant = false) {
-    const tileW = 1280;
-    const c = document.createElement('canvas'); c.width = tileW; c.height = h;
-    const gc = c.getContext('2d');
-
-    gc.fillStyle = mix(pal.leafDark, '#0b0d10', 0.2);
-    gc.fillRect(0, h - 12, tileW, 12);
-
-    let seed = (Math.random() * 1e9) | 0;
-    const rng = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
-
-    const count = Math.floor((tileW / 36) * density);
-    for (let i = 0; i < count; i++) {
-      const baseX = (i * (tileW / count)) + rng() * 18;
-      const spread = 18 + rng() * 28;
-      const trunkW = 6 + rng() * 5;
-      const height = (h * (distant ? 0.35 : 0.55)) + rng() * (h * (distant ? 0.15 : 0.25));
-      const baseY = h;
-
-      const gx = baseX + spread * 0.45;
-      const gyTop = baseY - height;
-      const trunkGrad = gc.createLinearGradient(0, gyTop, 0, baseY);
-      trunkGrad.addColorStop(0, pal.trunkLight);
-      trunkGrad.addColorStop(1, pal.trunkDark);
-      gc.fillStyle = trunkGrad;
-      gc.fillRect(gx, gyTop, trunkW, height);
-
-      const cx = baseX;
-      const cy = gyTop + height * (distant ? 0.35 : 0.28);
-
-      paintLeaves(gc, cx, cy, spread, height * (distant ? 0.48 : 0.62), pal, distant);
-
-      gc.save();
-      gc.globalAlpha = 0.25;
-      gc.filter = 'blur(0.6px)';
-      roundedRect(baseX - spread * 0.2, h - 4, spread * 1.2, 4, 2); gc.fill();
-      gc.restore();
-    }
-
-    // No old fades; add new edge fades instead
-    addEdgeFades(c, FADE_W);
-
-    return { canvas: c, w: tileW, h };
-  }
-
-  function paintLeaves(gc, cx, cy, w, h, pal, distant) {
-    gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h); gc.fill();
-    gc.fillStyle = pal.leafMid;  organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78); gc.fill();
-
-    const hl = gc.createRadialGradient(cx, cy - h*0.25, 10, cx, cy - h*0.25, Math.max(20, w*0.9));
-    hl.addColorStop(0, pal.leafLight); hl.addColorStop(1, 'rgba(255,255,255,0)');
-    gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5); gc.fill();
-
-    gc.save();
-    gc.globalAlpha = distant ? 0.08 : 0.12;
-    for (let i = 0; i < 22; i++) {
-      const px = cx + (Math.random() - 0.5) * w * 0.9;
-      const py = cy - h*0.2 + (Math.random() - 0.2) * h * 0.7;
-      roundedRect(px, py, 6 + Math.random()*8, 4 + Math.random()*6, 2); gc.fillStyle = pal.leafLight; gc.fill();
-    }
-    gc.restore();
-  }
-
-  function organicBlob(gc, cx, cy, w, h) {
-    gc.beginPath();
-    gc.moveTo(cx - w/2, cy);
-    gc.bezierCurveTo(cx - w*0.55, cy - h*0.35, cx - w*0.25, cy - h*0.75, cx, cy - h*0.7);
-    gc.bezierCurveTo(cx + w*0.25, cy - h*0.75, cx + w*0.55, cy - h*0.35, cx + w/2, cy);
-    gc.bezierCurveTo(cx + w*0.55, cy + h*0.35, cx + w*0.25, cy + h*0.5, cx, cy + h*0.45);
-    gc.bezierCurveTo(cx - w*0.25, cy + h*0.5, cx - w*0.55, cy + h*0.35, cx - w/2, cy);
-  }
-  function mix(hex, hex2, t) {
-    const a = parseInt(hex.slice(1),16), b = parseInt(hex2.slice(1),16);
-    const r = (a>>16)&255, g=(a>>8)&255, bl=a&255;
-    const r2=(b>>16)&255, g2=(b>>8)&255, bl2=b&255;
-    const rr = Math.round(r + (r2-r)*t), gg=Math.round(g+(g2-g)*t), bb=Math.round(bl+(bl2-bl)*t);
-    return `#${((1<<24)+(rr<<16)+(gg<<8)+bb).toString(16).slice(1)}`;
-  }
-})();
-</script>
+        function attachMusicUnlock() {
+            if (musicUnlockHandler) return;
+            musicUnlockHandler = () => {
+                bgMusic.play().catch(() => {});
+                detachMusicUnlock();
+            };
+            window.addEventListener('pointerdown', musicUnlockHandler);
+            window.addEventListener('touchstart', musicUnlockHandler);
+        }
+        function setCharacterMusic(index) {
+            const musicSrc = characterMusic[index];
+            if (!musicSrc) return;
+            if (bgMusic.getAttribute('data-current-src') !== musicSrc) {
+                bgMusic.pause();
+                bgMusic.src = musicSrc;
+                bgMusic.load();
+                bgMusic.setAttribute('data-current-src', musicSrc);
+            }
+            bgMusic.currentTime = 0;
+        }
+        function tryStartMusic() {
+            if (!bgMusic.src) return;
+            const playPromise = bgMusic.play();
+            if (playPromise && typeof playPromise.then === 'function') {
+                playPromise
+                    .then(() => {
+                        detachMusicUnlock();
+                    })
+                    .catch(() => {
+                        attachMusicUnlock();
+                    });
+            } else {
+                detachMusicUnlock();
+            }
+        }
+        function selectCharacter(index) {
+            selectedIndex = index;
+            setCharacterMusic(index);
+            tryStartMusic();
+            document.getElementById('char-select').style.display = 'none';
+            document.getElementById('back-home').style.display = 'block';
+            initGame();
+        }
+        function showCharSelect() {
+            document.getElementById('char-select').style.display = 'flex';
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('back-home').style.display = 'none';
+            bgMusic.pause();
+            bgMusic.currentTime = 0;
+            detachMusicUnlock();
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        }
+        window.addEventListener('mousedown', () => {
+            jumpingPressed = true;
+            tryStartMusic();
+        });
+        window.addEventListener('mouseup', () => (jumpingPressed = false));
+        window.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            jumpingPressed = true;
+            tryStartMusic();
+        });
+        window.addEventListener('touchend', () => (jumpingPressed = false));
+        function drawWings(x, y, flapAngle) {
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x - charSize / 2, y);
+            ctx.quadraticCurveTo(x - charSize / 2 - wingSize * 1.2, y + flapAngle * 1.5, x - charSize / 2 - wingSize / 2, y + flapAngle);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + charSize / 2, y);
+            ctx.quadraticCurveTo(x + charSize / 2 + wingSize * 1.2, y + flapAngle * 1.5, x + charSize / 2 + wingSize / 2, y + flapAngle);
+            ctx.stroke();
+        }
+        function getWaterHeightAtX(x) {
+            return canvas.height - waterHeight + Math.sin((x * waveFrequency + waveOffset) * 2) * waveAmplitude;
+        }
+        function drawRainbowWater() {
+            beatPhase += beatSpeed;
+            waveOffset += gameSpeed * 0.032 + Math.sin(beatPhase) * 0.025;
+            const gradient = ctx.createLinearGradient(0, canvas.height - waterHeight * 1.5, 0, canvas.height);
+            gradient.addColorStop(0, 'rgba(255, 0, 0, 0.82)');
+            gradient.addColorStop(0.14, 'rgba(255, 140, 0, 0.8)');
+            gradient.addColorStop(0.28, 'rgba(255, 215, 0, 0.82)');
+            gradient.addColorStop(0.42, 'rgba(0, 200, 0, 0.78)');
+            gradient.addColorStop(0.56, 'rgba(30, 144, 255, 0.8)');
+            gradient.addColorStop(0.7, 'rgba(106, 90, 205, 0.82)');
+            gradient.addColorStop(1, 'rgba(186, 85, 211, 0.9)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(0, getWaterHeightAtX(0));
+            for (let x = 0; x <= canvas.width; x += 5) {
+                ctx.lineTo(x, getWaterHeightAtX(x));
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+            for (let i = 0; i < 20; i++) {
+                const wx = (i * 110 + waveOffset * 12) % canvas.width;
+                ctx.beginPath();
+                ctx.arc(wx, getWaterHeightAtX(wx) - 12, 3.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        function drawHeart(x, y, size, color) {
+            ctx.save();
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.moveTo(x, y + size / 4);
+            ctx.quadraticCurveTo(x + size / 2, y - size / 4, x + size / 2, y + size / 4);
+            ctx.quadraticCurveTo(x + size / 2, y + size / 2, x, y + size * 3 / 4);
+            ctx.quadraticCurveTo(x - size / 2, y + size / 2, x - size / 2, y + size / 4);
+            ctx.quadraticCurveTo(x - size / 2, y - size / 4, x, y + size / 4);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.restore();
+        }
+        function drawCoinItem(x, y, size) {
+            if (coinReady) {
+                ctx.drawImage(coinImage, x, y, size, size);
+            } else {
+                // Fallback placeholder
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        function drawJewellery(x, y, size) {
+            if (jewelleryReady) {
+                ctx.drawImage(jewelleryImage, x, y, size, size);
+            } else {
+                // Fallback placeholder
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        function updateObstacles() {
+            obstacleSpawnTimer++;
+            if (obstacleSpawnTimer > obstacleInterval) {
+                const minY = 150;
+                const maxY = canvas.height - waterHeight - obstacleSize - 50;
+                const obsY = minY + Math.random() * (maxY - minY);
+                obstacles.push({
+                    x: canvas.width + obstacleSize,
+                    y: obsY,
+                    width: obstacleSize,
+                    height: obstacleSize
+                });
+                obstacleSpawnTimer = 0;
+            }
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= gameSpeed;
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+        function updateCoins() {
+            coinSpawnTimer++;
+            if (coinSpawnTimer > coinInterval) {
+                const minY = 150;
+                const maxY = canvas.height - waterHeight - coinSize - 50;
+                const coinY = minY + Math.random() * (maxY - minY);
+                coinsList.push({
+                    x: canvas.width + coinSize,
+                    y: coinY,
+                    width: coinSize,
+                    height: coinSize
+                });
+                coinSpawnTimer = 0;
+            }
+            for (let i = coinsList.length - 1; i >= 0; i--) {
+                coinsList[i].x -= gameSpeed;
+                if (coinsList[i].x + coinsList[i].width < 0) {
+                    coinsList.splice(i, 1);
+                }
+            }
+        }
+        function updateJewellery() {
+            jewellerySpawnTimer++;
+            if (jewellerySpawnTimer > jewelleryInterval) {
+                const minY = 150;
+                const maxY = canvas.height - waterHeight - jewellerySize - 50;
+                const jewelleryY = minY + Math.random() * (maxY - minY);
+                jewelleryList.push({
+                    x: canvas.width + jewellerySize,
+                    y: jewelleryY,
+                    width: jewellerySize,
+                    height: jewellerySize
+                });
+                jewellerySpawnTimer = 0;
+            }
+            for (let i = jewelleryList.length - 1; i >= 0; i--) {
+                jewelleryList[i].x -= gameSpeed;
+                if (jewelleryList[i].x + jewelleryList[i].width < 0) {
+                    jewelleryList.splice(i, 1);
+                }
+            }
+        }
+        function drawObstacles() {
+            for (const obs of obstacles) {
+                drawHeart(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width, obstacleColor);
+            }
+        }
+        function drawCoins() {
+            for (const coin of coinsList) {
+                drawCoinItem(coin.x, coin.y, coin.width);
+            }
+        }
+        function drawJewelleryItems() {
+            for (const jewel of jewelleryList) {
+                drawJewellery(jewel.x, jewel.y, jewel.width);
+            }
+        }
+        function checkObstacleCollision() {
+            // Removed game over trigger; now immortal!
+            for (const obs of obstacles) {
+                const char = characters[selectedIndex];
+                if (
+                    char.x + charSize / 2 > obs.x &&
+                    char.x - charSize / 2 < obs.x + obs.width &&
+                    char.y + charSize / 2 > obs.y &&
+                    char.y - charSize / 2 < obs.y + obs.height
+                ) {
+                    // Optional: Could add a bounce or effect here, but keeping it simple
+                }
+            }
+        }
+        function checkCoinCollection() {
+            for (let i = coinsList.length - 1; i >= 0; i--) {
+                const coin = coinsList[i];
+                const char = characters[selectedIndex];
+                if (
+                    char.x + charSize / 2 > coin.x &&
+                    char.x - charSize / 2 < coin.x + coin.width &&
+                    char.y + charSize / 2 > coin.y &&
+                    char.y - charSize / 2 < coin.y + coin.height
+                ) {
+                    coins++;
+                    localStorage.setItem('coins', coins);
+                    document.getElementById('coin-count').textContent = coins;
+                    coinSound.play().catch(() => {});
+                    if (navigator.vibrate) {
+                        navigator.vibrate(200);
+                    }
+                    coinsList.splice(i, 1);
+                }
+            }
+        }
+        function checkJewelleryCollection() {
+            for (let i = jewelleryList.length - 1; i >= 0; i--) {
+                const jewel = jewelleryList[i];
+                const char = characters[selectedIndex];
+                if (
+                    char.x + charSize / 2 > jewel.x &&
+                    char.x - charSize / 2 < jewel.x + jewel.width &&
+                    char.y + charSize / 2 > jewel.y &&
+                    char.y - charSize / 2 < jewel.y + jewel.height
+                ) {
+                    jewellery++;
+                    localStorage.setItem('jewellery', jewellery);
+                    document.getElementById('jewellery-count').textContent = jewellery;
+                    coinSound.play().catch(() => {}); // Reuse coin sound for jewellery
+                    if (navigator.vibrate) {
+                        navigator.vibrate(200);
+                    }
+                    jewelleryList.splice(i, 1);
+                }
+            }
+        }
+        function updateCharacters() {
+            const char = characters[selectedIndex];
+            if (jumpingPressed && !jumpingPressedPrev) {
+                flapSound.currentTime = 0;
+                flapSound.play().catch(() => {});
+                char.vy = jumpStrength;
+            }
+            char.vy += gravity;
+            char.y += char.vy;
+            const ceiling = charSize / 2 + 20;
+            if (char.y < ceiling) {
+                char.y = ceiling;
+                if (char.vy < 0) char.vy = 0;
+            }
+            const airLower = canvas.height - waterHeight - charSize - 20;
+            if (char.y > airLower) {
+                char.y = airLower;
+                if (char.vy > 0) char.vy = 0;
+            }
+            // Removed water collision game over; now bounces off
+            if (char.y + charSize / 2 > getWaterHeightAtX(char.x)) {
+                char.y = getWaterHeightAtX(char.x) - charSize / 2;
+                char.vy = 0;
+            }
+            jumpingPressedPrev = jumpingPressed;
+        }
+        function drawCharacters() {
+            const time = Date.now() * 0.01;
+            const flapBase = jumpingPressed ? Math.sin(time * 16) * -14 : Math.sin(time * 8) * 8;
+            const char = characters[selectedIndex];
+            const personalFlap = flapBase + Math.sin(time * 5 + selectedIndex) * 3;
+            drawWings(char.x, char.y, personalFlap);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(char.x, char.y, charSize / 2, 0, Math.PI * 2);
+            if (!char.ready) {
+                ctx.fillStyle = char.placeholder;
+                ctx.fill();
+            }
+            ctx.clip();
+            ctx.shadowColor = jumpingPressed ? '#FFD700' : '#FFF';
+            ctx.shadowBlur = 16;
+            if (char.ready && char.image.naturalWidth) {
+                ctx.filter = 'brightness(1.2) contrast(1.3) saturate(1.5)';
+                ctx.drawImage(char.image, char.x - charSize / 2, char.y - charSize / 2, charSize, charSize);
+                ctx.filter = 'none';
+            }
+            ctx.restore();
+            // Draw equipped accessory if any
+            if (equippedAccessory === 'crown' && crownReady) {
+                ctx.drawImage(crownImage, char.x - crownSize / 2, char.y - charSize / 2 - crownSize / 2 - 5, crownSize, crownSize); // Position on top of head
+            }
+            // Draw equipped pet if any
+            if (equippedPet === 'kitten' && kittenReady) {
+                ctx.drawImage(kittenImage, char.x + charSize / 2 + 10, char.y - petSize / 2, petSize, petSize);
+            } else if (equippedPet === 'puppy' && puppyReady) {
+                ctx.drawImage(puppyImage, char.x + charSize / 2 + 10, char.y - petSize / 2, petSize, petSize);
+            }
+        }
+        function drawScore() {
+            document.getElementById('score').textContent = `Score: ${Math.floor(score / 60)}`;
+        }
+        function triggerGameOver() {
+            // Disabled entirely for immortality mode
+        }
+        function gameLoop() {
+            if (gameOver || selectedIndex === -1) return;
+            score++;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+            skyGrad.addColorStop(0, '#87CEEB');
+            skyGrad.addColorStop(0.5, '#B0E0E6');
+            skyGrad.addColorStop(1, '#E0FFFF');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            for (let i = 0; i < 5; i++) {
+                const cx = (i * 320 + score * 0.35) % (canvas.width + 220) - 110;
+                const cy = 90 + i * 80;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+                ctx.arc(cx + 35, cy, 50, 0, Math.PI * 2);
+                ctx.arc(cx + 70, cy, 35, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            drawRainbowWater();
+            updateObstacles();
+            updateCoins();
+            updateJewellery();
+            drawObstacles();
+            drawCoins();
+            drawJewelleryItems();
+            checkObstacleCollision();
+            checkCoinCollection();
+            checkJewelleryCollection();
+            updateCharacters();
+            drawCharacters();
+            drawScore();
+            if (!gameOver) {
+                animationId = requestAnimationFrame(gameLoop);
+            }
+        }
+        function resetCharacters() {
+            const char = characters[selectedIndex];
+            char.x = canvas.width / 2;
+            char.y = canvas.height / 2 - 50;
+            char.vy = 0;
+        }
+        function initGame() {
+            obstacleColor = characters[selectedIndex].placeholder;
+            resetCharacters();
+            gameOver = false;
+            score = 0;
+            // Don't reset coins and jewellery, as they are persistent
+            document.getElementById('coin-count').textContent = coins;
+            document.getElementById('jewellery-count').textContent = jewellery;
+            obstacleSpawnTimer = 0;
+            coinSpawnTimer = 0;
+            jewellerySpawnTimer = 0;
+            obstacles = [];
+            coinsList = [];
+            jewelleryList = [];
+            jumpingPressed = false;
+            jumpingPressedPrev = false;
+            document.getElementById('game-over').style.display = 'none';
+            bgMusic.currentTime = 0;
+            tryStartMusic();
+            drawScore();
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            animationId = requestAnimationFrame(gameLoop);
+        }
+        function restartGame() {
+            showCharSelect();
+        }
+        function openShop() {
+            document.getElementById('char-select').style.display = 'none';
+            document.getElementById('shop').style.display = 'flex';
+            document.getElementById('shop-coins').textContent = coins;
+            if (kittenReady) {
+                document.getElementById('kitten-preview').src = kittenSrc;
+            }
+            if (coinReady) {
+                document.getElementById('coin-icon').src = coinSrc;
+            }
+            if (puppyReady) {
+                document.getElementById('puppy-preview').src = puppySrc;
+            }
+            if (coinReady) {
+                document.getElementById('coin-icon2').src = coinSrc;
+            }
+            if (crownReady) {
+                document.getElementById('crown-preview').src = crownSrc;
+            }
+            if (coinReady) {
+                document.getElementById('coin-icon3').src = coinSrc;
+            }
+        }
+        function closeShop() {
+            document.getElementById('shop').style.display = 'none';
+            document.getElementById('char-select').style.display = 'flex';
+        }
+        function buyKitten() {
+            if (coins >= 50 && !inventory.includes('kitten')) {
+                coins -= 50;
+                inventory.push('kitten');
+                localStorage.setItem('coins', coins);
+                localStorage.setItem('inventory', JSON.stringify(inventory));
+                document.getElementById('shop-coins').textContent = coins;
+                alert("Yay! You got the Fluffy Kitten! 😻");
+            } else if (inventory.includes('kitten')) {
+                alert("You already have the Fluffy Kitten! 🐱");
+            } else {
+                alert("Oops, you need 50 coins! Keep collecting! 💰");
+            }
+        }
+        function buyPuppy() {
+            if (coins >= 50 && !inventory.includes('puppy')) {
+                coins -= 50;
+                inventory.push('puppy');
+                localStorage.setItem('coins', coins);
+                localStorage.setItem('inventory', JSON.stringify(inventory));
+                document.getElementById('shop-coins').textContent = coins;
+                alert("Yay! You got the Cute Puppy! 🐶");
+            } else if (inventory.includes('puppy')) {
+                alert("You already have the Cute Puppy! 🐕");
+            } else {
+                alert("Oops, you need 50 coins! Keep collecting! 💰");
+            }
+        }
+        function buyCrown() {
+            if (coins >= 50 && !inventory.includes('crown')) {
+                coins -= 50;
+                inventory.push('crown');
+                localStorage.setItem('coins', coins);
+                localStorage.setItem('inventory', JSON.stringify(inventory));
+                document.getElementById('shop-coins').textContent = coins;
+                alert("Yay! You got the Princess Crown! 👑");
+            } else if (inventory.includes('crown')) {
+                alert("You already have the Princess Crown! 👑");
+            } else {
+                alert("Oops, you need 50 coins! Keep collecting! 💰");
+            }
+        }
+        function openMyStuff() {
+            document.getElementById('char-select').style.display = 'none';
+            document.getElementById('my-stuff').style.display = 'flex';
+            const list = document.getElementById('inventory-list');
+            list.innerHTML = '';
+            if (inventory.includes('kitten')) {
+                let buttonHtml = '';
+                if (equippedPet === 'kitten') {
+                    buttonHtml = '<button onclick="removeKitten()">Remove</button>';
+                } else {
+                    buttonHtml = '<button onclick="useKitten()">Use this item</button>';
+                }
+                list.innerHTML += '<div><h3>Fluffy Kitten</h3><img src="' + kittenSrc + '" alt="Fluffy Kitten" style="width: 100px; height: 100px; border-radius: 10px;">' + buttonHtml + '</div>';
+            }
+            if (inventory.includes('puppy')) {
+                let buttonHtml = '';
+                if (equippedPet === 'puppy') {
+                    buttonHtml = '<button onclick="removePuppy()">Remove</button>';
+                } else {
+                    buttonHtml = '<button onclick="usePuppy()">Use this item</button>';
+                }
+                list.innerHTML += '<div><h3>Cute Puppy</h3><img src="' + puppySrc + '" alt="Cute Puppy" style="width: 100px; height: 100px; border-radius: 10px;">' + buttonHtml + '</div>';
+            }
+            if (inventory.includes('crown')) {
+                let buttonHtml = '';
+                if (equippedAccessory === 'crown') {
+                    buttonHtml = '<button onclick="removeCrown()">Remove</button>';
+                } else {
+                    buttonHtml = '<button onclick="useCrown()">Use this item</button>';
+                }
+                list.innerHTML += '<div><h3>Princess Crown</h3><img src="' + crownSrc + '" alt="Princess Crown" style="width: 100px; height: 100px; border-radius: 10px;">' + buttonHtml + '</div>';
+            }
+            if (inventory.length === 0) {
+                list.innerHTML += '<p>You don\'t have any stuff yet! Go shopping! 🛍️</p>';
+            }
+        }
+        function useKitten() {
+            equippedPet = 'kitten';
+            localStorage.setItem('equippedPet', equippedPet);
+            alert("Fluffy Kitten is now with you! 😻");
+            openMyStuff(); // Refresh the list to show the remove button
+        }
+        function usePuppy() {
+            equippedPet = 'puppy';
+            localStorage.setItem('equippedPet', equippedPet);
+            alert("Cute Puppy is now with you! 🐶");
+            openMyStuff(); // Refresh the list to show the remove button
+        }
+        function removeKitten() {
+            equippedPet = null;
+            localStorage.removeItem('equippedPet');
+            alert("Fluffy Kitten has been removed! 🐱");
+            openMyStuff(); // Refresh the list to show the use button
+        }
+        function removePuppy() {
+            equippedPet = null;
+            localStorage.removeItem('equippedPet');
+            alert("Cute Puppy has been removed! 🐕");
+            openMyStuff(); // Refresh the list to show the use button
+        }
+        function useCrown() {
+            equippedAccessory = 'crown';
+            localStorage.setItem('equippedAccessory', equippedAccessory);
+            alert("Princess Crown is now equipped! 👑");
+            openMyStuff(); // Refresh the list to show the remove button
+        }
+        function removeCrown() {
+            equippedAccessory = null;
+            localStorage.removeItem('equippedAccessory');
+            alert("Princess Crown has been removed! 👑");
+            openMyStuff(); // Refresh the list to show the use button
+        }
+        function closeMyStuff() {
+            document.getElementById('my-stuff').style.display = 'none';
+            document.getElementById('char-select').style.display = 'flex';
+        }
+        function openMyHouse() {
+            document.getElementById('char-select').style.display = 'none';
+            document.getElementById('my-house').style.display = 'flex';
+        }
+        function closeMyHouse() {
+            document.getElementById('my-house').style.display = 'none';
+            document.getElementById('char-select').style.display = 'flex';
+        }
+        // Add event listeners to save data before unloading
+        window.addEventListener('beforeunload', () => {
+            localStorage.setItem('coins', coins);
+            localStorage.setItem('jewellery', jewellery);
+            localStorage.setItem('inventory', JSON.stringify(inventory));
+            if (equippedPet) localStorage.setItem('equippedPet', equippedPet);
+            if (equippedAccessory) localStorage.setItem('equippedAccessory', equippedAccessory);
+        });
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            waterHeight = canvas.height * waterHeightRatio;
+            if (selectedIndex !== -1) resetCharacters();
+        });
+        characters.forEach((char, index) => {
+            char.image.addEventListener('load', () => {
+                processImage(char.image, index, (processedImg) => {
+                    char.image = processedImg;
+                    char.ready = true;
+                }, false);
+            });
+            char.image.addEventListener('error', () => {
+                console.warn(`Error loading ${char.name}'s image - check file path!`);
+            });
+            if (char.image.complete && char.image.naturalWidth) {
+                char.image.dispatchEvent(new Event('load'));
+            }
+        });
+        // Process the jewellery image with auto background removal
+        jewelleryImage.addEventListener('load', () => {
+            processImage(jewelleryImage, -1, (processedImg) => {
+                jewellerySrc = processedImg.src;
+                jewelleryImage = processedImg;
+                jewelleryReady = true;
+                document.getElementById('jewellery-display-img').src = jewellerySrc;
+            }, true);
+        });
+        jewelleryImage.addEventListener('error', () => {
+            console.warn('Error loading jewellery image - check file path!');
+        });
+        if (jewelleryImage.complete && jewelleryImage.naturalWidth) {
+            jewelleryImage.dispatchEvent(new Event('load'));
+        }
+        // Process the coin image with auto background removal
+        coinImage.addEventListener('load', () => {
+            processImage(coinImage, -1, (processedImg) => {
+                coinSrc = processedImg.src;
+                coinImage = processedImg;
+                coinReady = true;
+                document.getElementById('coin-display-img').src = coinSrc;
+                if (document.getElementById('coin-icon')) {
+                    document.getElementById('coin-icon').src = coinSrc;
+                }
+                if (document.getElementById('coin-icon2')) {
+                    document.getElementById('coin-icon2').src = coinSrc;
+                }
+                if (document.getElementById('coin-icon3')) {
+                    document.getElementById('coin-icon3').src = coinSrc;
+                }
+            }, true);
+        });
+        coinImage.addEventListener('error', () => {
+            console.warn('Error loading coin image - check file path!');
+        });
+        if (coinImage.complete && coinImage.naturalWidth) {
+            coinImage.dispatchEvent(new Event('load'));
+        }
+        // Process the kitten image with auto background removal
+        kittenImage.addEventListener('load', () => {
+            processImage(kittenImage, -1, (processedImg) => {
+                kittenSrc = processedImg.src;
+                kittenImage = processedImg;
+                kittenReady = true;
+                if (document.getElementById('kitten-preview')) {
+                    document.getElementById('kitten-preview').src = kittenSrc;
+                }
+            }, true);
+        });
+        kittenImage.addEventListener('error', () => {
+            console.warn('Error loading kitten image - check file path!');
+        });
+        if (kittenImage.complete && kittenImage.naturalWidth) {
+            kittenImage.dispatchEvent(new Event('load'));
+        }
+        // Process the puppy image with auto background removal
+        puppyImage.addEventListener('load', () => {
+            processImage(puppyImage, -1, (processedImg) => {
+                puppySrc = processedImg.src;
+                puppyImage = processedImg;
+                puppyReady = true;
+                if (document.getElementById('puppy-preview')) {
+                    document.getElementById('puppy-preview').src = puppySrc;
+                }
+            }, true);
+        });
+        puppyImage.addEventListener('error', () => {
+            console.warn('Error loading puppy image - check file path!');
+        });
+        if (puppyImage.complete && puppyImage.naturalWidth) {
+            puppyImage.dispatchEvent(new Event('load'));
+        }
+        // Process the crown image with auto background removal
+        crownImage.addEventListener('load', () => {
+            processImage(crownImage, -1, (processedImg) => {
+                crownSrc = processedImg.src;
+                crownImage = processedImg;
+                crownReady = true;
+                if (document.getElementById('crown-preview')) {
+                    document.getElementById('crown-preview').src = crownSrc;
+                }
+            }, true);
+        });
+        crownImage.addEventListener('error', () => {
+            console.warn('Error loading crown image - check file path!');
+        });
+        if (crownImage.complete && crownImage.naturalWidth) {
+            crownImage.dispatchEvent(new Event('load'));
+        }
+        // Initial display updates
+        document.getElementById('coin-count').textContent = coins;
+        document.getElementById('jewellery-count').textContent = jewellery;
+        showCharSelect();
+    </script>
 </body>
 </html>
