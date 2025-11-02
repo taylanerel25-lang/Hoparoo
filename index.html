@@ -93,8 +93,8 @@
   // Player size
   const ROO = { w: 130, h: 94 };
 
-  // === Player sprite (8-frame hop cycle, transparent PNG) ===
-  const ROO_IMG_URL = 'https://i.imgur.com/8n2jV3Z.png'; // 8-frame kangaroo hop sheet
+  // === Player sprite ===
+  const ROO_IMG_URL    = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Kangaroo?v=1';
   const ROO_FRAMES = 8;
   const ROO_IMG_OFFSET = { x: 0, y: 0 };
   const ROO_IMG_TILT   = { up: -0.18, down: 0.22, max: 0.28 };
@@ -108,7 +108,7 @@
   const BG_CHROMA_TOL   = 34;
   const BG_MIRROR_TILING = true;
 
-  const BOB = { amp: 28, freq: 6.8 };
+  const BOB = { amp: 28, freq: 6.8 }; // Smoother, bouncier hop
   const SPAWN_GAP = { min: 380, max: 720 };
   const SAFE_START_MS = 1200;
 
@@ -149,15 +149,15 @@
   let W = 0, H = 0, GROUND_Y = 0;
 
   // Assets
-  let rooImg = null, rooImgLoaded = false;
-  let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
+  let rooImg=null, rooImgLoaded=false;
+  let bgBackImg=null, bgFrontImg=null, bgBackLoaded=false, bgFrontLoaded=false;
 
   // Parallax state
   let bgBackX = 0, bgFrontX = 0;
   let BACK_H = 0, FRONT_H = 0, backY = 0, frontY = 0;
   let bandBack = null, bandFront = null, bandBackW = 0, bandFrontW = 0;
 
-  // Tree palettes
+  // Tree palettes (richer, more realistic)
   const PALETTE_BACK = {
     leafLight: '#a8d5a8', leafMid: '#8ab88a', leafDark: '#6b9a6b',
     trunkLight: '#8c7a5e', trunkDark: '#5d4a36', shadow: 'rgba(0,0,0,0.12)'
@@ -169,25 +169,20 @@
 
   // Load assets
   async function loadImages(){
-    try {
-      if (ROO_IMG_URL) {
-        rooImg = await loadStripWithChroma(ROO_IMG_URL, [0,0,0], 40);
-        rooImgLoaded = true;
-      }
-    } catch (e) {
-      console.warn("Kangaroo sprite failed to load, using fallback.");
-      rooImgLoaded = false;
+    if (ROO_IMG_URL){
+      rooImg = await loadStripWithChroma(ROO_IMG_URL, BG_CHROMA, BG_CHROMA_TOL);
+      rooImgLoaded = true;
     }
-
-    try {
-      if (BG_FRONT_URL) {
-        bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
-        addEdgeFades(bgFrontImg, FADE_W);
-        bgFrontLoaded = true;
-      }
-    } catch (e) { bgFrontLoaded = false; }
-
-    if (!bgBackLoaded && bgFrontImg) {
+    if (BG_FRONT_URL) {
+      bgFrontImg = await loadStripWithChroma(BG_FRONT_URL, BG_CHROMA, BG_CHROMA_TOL);
+      addEdgeFades(bgFrontImg, FADE_W);
+      bgFrontLoaded = true;
+    }
+    if (BG_BACK_URL) {
+      bgBackImg = await loadStripWithChroma(BG_BACK_URL, BG_CHROMA, BG_CHROMA_TOL);
+      addEdgeFades(bgBackImg, FADE_W);
+      bgBackLoaded = true;
+    } else if (bgFrontImg) {
       bgBackImg = makeVariant(bgFrontImg, 0.94, 0.86);
       addEdgeFades(bgBackImg, FADE_W);
       bgBackLoaded = true;
@@ -216,6 +211,7 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     GROUND_Y = Math.floor(H * GROUND_RATIO);
 
+    // Trees lowered to match kangaroo height
     BACK_H  = Math.floor(H * 0.28);
     FRONT_H = Math.floor(H * 0.40);
     backY   = GROUND_Y - BACK_H;
@@ -227,24 +223,21 @@
   resize();
 
   function buildBands() {
-    if (!BG_BACK_URL && !bandBack) {
-      const b = createTreeBand(BACK_H, PALETTE_BACK, 0.85, true);
-      bandBack = b.canvas; bandBackW = b.w;
-      addEdgeFades(bandBack, FADE_W);
-    }
-    if (!BG_FRONT_URL && !bandFront) {
-      const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.25, false);
-      bandFront = f.canvas; bandFrontW = f.w;
-      addEdgeFades(bandFront, FADE_W);
-    }
+    if (!BG_BACK_URL) { const b = createTreeBand(BACK_H, PALETTE_BACK, 0.85, true); bandBack = b.canvas; bandBackW = b.w; addEdgeFades(bandBack, FADE_W); }
+    if (!BG_FRONT_URL) { const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.25, false); bandFront = f.canvas; bandFrontW = f.w; addEdgeFades(bandFront, FADE_W); }
   }
 
   // Game state
   const state = {
-    playing: false, dead: false, time: 0, score: 0,
+    playing: false,
+    dead: false,
+    time: 0,
+    score: 0,
     best: Number(localStorage.getItem('hoparoo_best')||0),
-    distSinceSpawn: 0, nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
-    startedAt: 0, justLanded: false,
+    distSinceSpawn: 0,
+    nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
+    startedAt: 0,
+    justLanded: false,
   };
   bestHud.textContent = `Best: ${state.best}`;
 
@@ -276,8 +269,8 @@
   }
   window.addEventListener('pointerdown', jump);
   window.addEventListener('keydown', (e) => {
-    if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); jump(); }
-    if (state.dead && ['Space', 'Enter'].includes(e.code)) doPlayAgain();
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); }
+    if (state.dead && (e.code === 'Space' || e.code === 'Enter')) doPlayAgain();
   });
   document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
 
@@ -483,12 +476,11 @@
 
       ctx.restore();
     } else {
-      // Fallback green roo (always works)
-      ctx.fillStyle = KANGAROO_COLOR;
-      roundedRect(x + 10, y + 6, ROO.w - 20, ROO.h - 6, 12); ctx.fill();
-      ctx.fillRect(x + ROO.w - 28, y - 10, 28, 28);
-      ctx.fillRect(x + ROO.w - 18, y - 25, 12, 18);
-      ctx.fillRect(x, y + 12, 18, 8);
+      ctx.fillStyle = '#22c55e';
+      roundedRect(x, y + 6, ROO.w, ROO.h - 6, 10); ctx.fill();
+      ctx.fillRect(x + ROO.w - 18, y - 10, 18, 18);
+      ctx.fillRect(x + ROO.w - 10, y - 20, 8, 12);
+      ctx.fillRect(x - 14, y + 12, 14, 6);
     }
   }
 
@@ -535,7 +527,7 @@
   }
 
   function drawParallaxBand({ img, loaded, xOffset, y, h, layer }){
-    const src = (loaded && img) ? img : (layer==='back' ? bandBack : bandFront);
+    const src = (loaded && img && (img.width || img.naturalWidth)) ? img : (layer==='back' ? bandBack : bandFront);
     if (!src) return;
 
     const scale = h / src.height;
@@ -543,10 +535,11 @@
     const tileW = srcW * scale;
     const fade = FADE_W * scale;
     const repeatDist = tileW - fade;
+    const blurBack = (layer==='back' && !BG_BACK_URL);
     let x = -((xOffset % repeatDist) + repeatDist);
 
     for (let i=0; x < W + tileW; i++, x += repeatDist){
-      if (layer==='back' && !BG_BACK_URL){ ctx.filter='blur(1.2px) saturate(0.88)'; ctx.globalAlpha=0.94; }
+      if (blurBack){ ctx.filter='blur(1.2px) saturate(0.88)'; ctx.globalAlpha=0.94; }
       if (BG_MIRROR_TILING && (i % 2)){
         ctx.save(); ctx.scale(-1,1);
         ctx.drawImage(src, -(x + tileW), y, tileW, h);
@@ -554,7 +547,7 @@
       } else {
         ctx.drawImage(src, x, y, tileW, h);
       }
-      if (layer==='back' && !BG_BACK_URL){ ctx.filter='none'; ctx.globalAlpha=1; }
+      if (blurBack){ ctx.filter='none'; ctx.globalAlpha=1; }
     }
   }
 
@@ -588,10 +581,12 @@
       const cx = baseX;
       const cy = gyTop + height * (distant ? 0.32 : 0.25);
 
+      // Layered foliage
       paintFoliage(gc, cx, cy, spread, height * 0.65, pal, distant);
       paintFoliage(gc, cx + rng()*4 - 2, cy - height*0.08, spread*0.88, height*0.55, pal, distant);
       paintFoliage(gc, cx + rng()*6 - 3, cy - height*0.15, spread*0.75, height*0.45, pal, distant);
 
+      // Soft shadow under tree
       gc.save();
       gc.globalAlpha = distant ? 0.08 : 0.14;
       gc.filter = 'blur(1.2px)';
