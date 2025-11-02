@@ -95,7 +95,6 @@
 
   // Optional fine-tune for sprite draw relative to the hitbox
   // === Player sprite ===
-@@ -107,7 +107,7 @@
   // Remove black from trees.png
   const BG_CHROMA       = [0,0,0];
   const BG_CHROMA_TOL   = 34;                // raised for smoother edges
@@ -103,35 +102,10 @@
 
   const BOB = { amp: 24, freq: 5.5 }; // boosted for more hop-like animation
   const SPAWN_GAP = { min: 380, max: 720 };
-@@ -124,6 +124,8 @@
-    { name: 'roo',    w: 52, h: 42 },
-  ];
-
-  const BOUNCE_DAMPING = 0.7; // For fun bounces on collision
+  const BOUNCE_DAMPING = 0.85; // Increased for bouncier feel (better bounce)
 
   // Parallax backgrounds (images optional; realistic fallback built-in)
   // ======= /TWEAK ZONE =======
-
-@@ -363,254 +365,267 @@
-        w: ROO.w * shrink,
-        h: ROO.h * shrink
-      };
-      let collided = false;
-      for (const o of obstacles) {
-        if (rectsOverlap(rb, o)) {
-          collided = true;
-          // Bounce instead of game over!
-          roo.vy *= -BOUNCE_DAMPING; // Reverse velocity with some damping for bounce
-          roo.y += roo.vy * dt; // Apply immediate bounce adjustment
-          roo.grounded = false;
-          break; // Only bounce off one at a time
-        }
-      }
-      if (collided) {
-        // Optional: Add a little sound or effect if you want later!
-      }
-    }
-  }
 
   function draw() {
     drawSky(); drawGround();
@@ -314,7 +288,7 @@
       const baseX = (i * (tileW / count)) + rng() * 18;
       const spread = 18 + rng() * 28;
       const trunkW = 6 + rng() * 5;
-      const height = (h * (distant ? 0.35 : 0.55)) + rng() * (h * (distant ? 0.15 : 0.25));
+      const height = (h * (distant ? 0.35 : 0.45)) + rng() * (h * (distant ? 0.15 : 0.2)); // Reduced height to better match kangaroo scale
       const baseY = h;
 
       const gx = baseX + spread * 0.45;
@@ -324,6 +298,23 @@
       trunkGrad.addColorStop(1, pal.trunkDark);
       gc.fillStyle = trunkGrad;
       gc.fillRect(gx, gyTop, trunkW, height);
+
+      // Add branches for more realism
+      gc.fillStyle = pal.trunkDark;
+      const branchCount = distant ? 1 : 2 + Math.floor(rng() * 2);
+      for (let b = 0; b < branchCount; b++) {
+        const side = rng() > 0.5 ? 1 : -1;
+        const bx = gx + (trunkW / 2) * side;
+        const by = gyTop + height * (0.4 + rng() * 0.4);
+        const branchLength = (15 + rng() * 25) * (distant ? 0.7 : 1);
+        const branchWidth = (2 + rng() * 3) * (distant ? 0.8 : 1);
+        const angle = (0.3 + rng() * 0.4) * Math.PI / 2 * side;
+        gc.save();
+        gc.translate(bx, by);
+        gc.rotate(angle);
+        gc.fillRect(0, -branchWidth / 2, branchLength, branchWidth);
+        gc.restore();
+      }
 
       const cx = baseX;
       const cy = gyTop + height * (distant ? 0.35 : 0.28);
@@ -344,12 +335,23 @@
   }
 
   function paintLeaves(gc, cx, cy, w, h, pal, distant) {
-    gc.fillStyle = pal.leafDark; organicBlob(gc, cx, cy, w, h); gc.fill();
-    gc.fillStyle = pal.leafMid;  organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78); gc.fill();
+    gc.fillStyle = pal.leafDark; 
+    organicBlob(gc, cx, cy, w, h); gc.fill(); // Main canopy
+    // Add side lobes for bushier, more realistic trees
+    organicBlob(gc, cx - w*0.3, cy + h*0.1, w*0.5, h*0.6); gc.fill();
+    organicBlob(gc, cx + w*0.3, cy + h*0.1, w*0.5, h*0.6); gc.fill();
+
+    gc.fillStyle = pal.leafMid;  
+    organicBlob(gc, cx, cy - h*0.08, w*0.9, h*0.78); gc.fill();
+    organicBlob(gc, cx - w*0.3, cy + h*0.1 - h*0.08, w*0.45, h*0.7); gc.fill();
+    organicBlob(gc, cx + w*0.3, cy + h*0.1 - h*0.08, w*0.45, h*0.7); gc.fill();
 
     const hl = gc.createRadialGradient(cx, cy - h*0.25, 10, cx, cy - h*0.25, Math.max(20, w*0.9));
     hl.addColorStop(0, pal.leafLight); hl.addColorStop(1, 'rgba(255,255,255,0)');
-    gc.fillStyle = hl; organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5); gc.fill();
+    gc.fillStyle = hl; 
+    organicBlob(gc, cx + 4, cy - h*0.18, w*0.8, h*0.5); gc.fill();
+    organicBlob(gc, cx - w*0.3 + 4, cy + h*0.1 - h*0.18, w*0.4, h*0.45); gc.fill();
+    organicBlob(gc, cx + w*0.3 + 4, cy + h*0.1 - h*0.18, w*0.4, h*0.45); gc.fill();
 
     gc.save();
     gc.globalAlpha = distant ? 0.08 : 0.12;
