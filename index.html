@@ -59,7 +59,7 @@
         <button id="shareBtn" class="btn">Share</button>
       </div>
     </div>
-  </div>
+ </div>
 
   <div id="howToModal" class="modal" role="dialog" aria-modal="true">
     <div class="panel" style="text-align:left;">
@@ -84,17 +84,19 @@
   // ======= TWEAK ZONE =======
   const RUN_SPEED = 300;
   const GRAVITY = 2000;
-  const JUMP_VELOCITY = -600;
+  const JUMP_VELOCITY = -720;
   const GROUND_RATIO = 0.78;
   const FADE_W = 128;
 
   const ROO = { w: 130, h: 94 };
-
-  // === PLAYER SPRITE ===
-  const ROO_IMG_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/Kangaroo.png';
-  const ROO_FRAMES = 1; // set to 8 if you later use a sprite sheet
-  const ROO_IMG_OFFSET = { x: 0, y: 0 };
-  const ROO_IMG_TILT = { up: -0.18, down: 0.22, max: 0.28 };
+  const ROO_TILT = { up: -0.18, down: 0.22, max: 0.28 };
+  const ROO_COLORS = {
+    base: '#22c55e',
+    mid: '#16a34a',
+    dark: '#15803d',
+    belly: '#bbf7d0',
+    accent: '#0f172a'
+  };
 
   // === TREES / PARALLAX ===
   const BG_FRONT_URL = 'https://raw.githubusercontent.com/taylanerel25-lang/Hoparoo/main/trees.png'; // lowercase!
@@ -110,7 +112,6 @@
 
   const SKY = ['#78c6ff', '#d9f0ff'];
   const GROUND_COLOR = '#2e3a45';
-  const KANGAROO_COLOR = '#22c55e';
 
   const OBSTACLE_COLORS = ['#f59e0b', '#ef4444', '#60a5fa'];
   const OBSTACLE_TYPES = [
@@ -145,7 +146,6 @@
   let W = 0, H = 0, GROUND_Y = 0;
 
   // Assets
-  let rooImg = null, rooImgLoaded = false;
   let bgBackImg = null, bgFrontImg = null, bgBackLoaded = false, bgFrontLoaded = false;
 
   // Parallax state
@@ -165,17 +165,6 @@
 
   // Load assets
   async function loadImages(){
-    // Roo – no chroma key, keep original alpha
-    if (ROO_IMG_URL) {
-      try {
-        rooImg = await loadImage(ROO_IMG_URL);
-        rooImgLoaded = true;
-      } catch (e) {
-        console.warn("Kangaroo image failed to load – using fallback.", e);
-        rooImgLoaded = false;
-      }
-    }
-
     // Trees – keep chroma key
     if (BG_FRONT_URL) {
       try {
@@ -201,109 +190,7 @@
     const g = c.getContext('2d');
     g.globalCompositeOperation = 'destination-out';
     const leftGrad = g.createLinearGradient(0, 0, fadeW, 0);
-    leftGrad.addColorStop(0, '#000'); leftGrad.addColorStop(1, 'transparent');
-    g.fillStyle = leftGrad; g.fillRect(0, 0, fadeW, c.height);
-    const rightGrad = g.createLinearGradient(c.width - fadeW, 0, c.width, 0);
-    rightGrad.addColorStop(0, '#000'); rightGrad.addColorStop(1, 'transparent');
-    g.fillStyle = rightGrad; g.fillRect(c.width - fadeW, 0, fadeW, c.height);
-    g.globalCompositeOperation = 'source-over';
-  }
-
-  function resize() {
-    W = Math.floor(window.innerWidth);
-    H = Math.floor(window.innerHeight);
-    canvas.width = Math.floor(W * DPR);
-    canvas.height = Math.floor(H * DPR);
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    GROUND_Y = Math.floor(H * GROUND_RATIO);
-
-    BACK_H  = Math.floor(H * 0.28);
-    FRONT_H = Math.floor(H * 0.40);
-    backY   = GROUND_Y - BACK_H;
-    frontY  = GROUND_Y - FRONT_H;
-
-    buildBands();
-  }
-  window.addEventListener('resize', resize, { passive: true });
-  resize();
-
-  function buildBands() {
-    if (!BG_BACK_URL && !bandBack) {
-      const b = createTreeBand(BACK_H, PALETTE_BACK, 0.85, true);
-      bandBack = b.canvas; bandBackW = b.w;
-      addEdgeFades(bandBack, FADE_W);
-    }
-    if (!BG_FRONT_URL && !bandFront) {
-      const f = createTreeBand(FRONT_H, PALETTE_FRONT, 1.25, false);
-      bandFront = f.canvas; bandFrontW = f.w;
-      addEdgeFades(bandFront, FADE_W);
-    }
-  }
-
-  // Game state
-  const state = {
-    playing: false, dead: false, time: 0, score: 0,
-    best: Number(localStorage.getItem('hoparoo_best')||0),
-    distSinceSpawn: 0, nextGap: rand(SPAWN_GAP.min, SPAWN_GAP.max),
-    startedAt: 0, justLanded: false,
-  };
-  bestHud.textContent = `Best: ${state.best}`;
-
-  // Roo
-  const roo = { x: Math.max(110, W * 0.18), y: 0, vy: 0, grounded: true, bobT: 0, landT: 0 };
-  function placeRooOnGround() {
-    roo.y = GROUND_Y - ROO.h;
-    roo.vy = 0;
-    roo.grounded = true;
-    state.justLanded = true;
-    roo.landT = 0.15;
-  }
-  placeRooOnGround();
-
-  // Obstacles
-  const obstacles = [];
-  function spawnObstacle() {
-    const t = OBSTACLE_TYPES[(Math.random() * OBSTACLE_TYPES.length) | 0];
-    const color = OBSTACLE_COLORS[(Math.random() * OBSTACLE_COLORS.length) | 0];
-    const h = t.h; const w = t.w; const y = GROUND_Y - h; const x = W + rand(12, 48);
-    obstacles.push({ x, y, w, h, type: t.name, color, scored: false });
-  }
-
-  // Input
-  function jump() {
-    if (state.dead) return;
-    if (!state.playing) { startGame(); return; }
-    if (roo.grounded) { roo.vy = JUMP_VELOCITY; roo.grounded = false; }
-  }
-  window.addEventListener('pointerdown', jump);
-  window.addEventListener('keydown', (e) => {
-    if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); jump(); }
-    if (state.dead && ['Space', 'Enter'].includes(e.code)) doPlayAgain();
-  });
-  document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
-
-  function startGame() {
-    state.playing = true; state.dead = false; state.time = 0; state.score = 0;
-    state.distSinceSpawn = 0; state.nextGap = rand(SPAWN_GAP.min, SPAWN_GAP.max); state.startedAt = performance.now();
-    obstacles.length = 0; placeRooOnGround();
-    hudScore.textContent = '0';
-    splashEl.style.display = 'none';
-    gameOverEl.style.display = 'none';
-  }
-
-  function gameOver() {
-    state.dead = true; state.playing = false;
-    state.best = Math.max(state.best, state.score);
-    localStorage.setItem('hoparoo_best', String(state.best));
-    bestHud.textContent = `Best: ${state.best}`;
-    scoreNow.textContent = `${state.score}`;
-    bestNow.textContent = `${state.best}`;
-    setTimeout(() => { gameOverEl.style.display = ''; }, 150);
-  }
-
-  function doPlayAgain(){
-    gameOverEl.style.display = 'none';
-    splashEl.style.display = '';
+@@ -307,52 +296,52 @@
     state.dead = false; state.playing = false; state.score = 0;
     obstacles.length = 0; placeRooOnGround(); hudScore.textContent = '0';
   }
@@ -329,8 +216,8 @@
   requestAnimationFrame(loop);
 
   function update(dt) {
-    bgBackX  += RUN_SPEED * BG_SCROLL.back  * dt;
-    bgFrontX += RUN_SPEED * BG_SCROLL.front * dt;
+    bgBackX  = (bgBackX + RUN_SPEED * BG_SCROLL.back  * dt) % 1000000;
+    bgFrontX = (bgFrontX + RUN_SPEED * BG_SCROLL.front * dt) % 1000000;
 
     hudScore.textContent = `${state.score}`;
 
@@ -356,78 +243,7 @@
     if (state.playing) {
       if (!roo.grounded) {
         roo.vy += GRAVITY * dt; roo.y += roo.vy * dt;
-        if (roo.y >= GROUND_Y - ROO.h) { placeRooOnGround(); }
-      } else {
-        roo.bobT += dt * BOB.freq;
-        if (roo.landT > 0) roo.landT = Math.max(0, roo.landT - dt);
-      }
-
-      const shrink = 0.86;
-      const rb = {
-        x: roo.x + (ROO.w * (1 - shrink)) / 2,
-        y: roo.y + (ROO.h * (1 - shrink)) / 2,
-        w: ROO.w * shrink,
-        h: ROO.h * shrink
-      };
-      let collided = false;
-      for (const o of obstacles) {
-        if (rectsOverlap(rb, o)) {
-          collided = true;
-          roo.vy *= -BOUNCE_DAMPING;
-          roo.y += roo.vy * dt;
-          roo.grounded = false;
-          break;
-        }
-      }
-    }
-  }
-
-  function draw() {
-    drawSky(); drawGround();
-    for (const o of obstacles) drawObstacle(o);
-    drawRoo();
-  }
-
-  function drawSky() {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-
-    const t = performance.now() * 0.00006;
-    ctx.globalAlpha = 0.14;
-    for (let i = 0; i < 10; i++) {
-      const cx = ((i * 311) - (t * 900)) % (W + 220) - 110;
-      const cy = 40 + (i * 53) % (GROUND_Y * 0.6);
-      const rw = 160 + (i % 3) * 60, rh = 40 + (i % 2) * 12;
-      roundedRect(cx, cy, rw, rh, 20); ctx.fillStyle = '#ffffff'; ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    drawParallaxBand({ img: bgBackImg, loaded: bgBackLoaded, xOffset: bgBackX, y: backY, h: BACK_H, layer: 'back' });
-    drawParallaxBand({ img: bgFrontImg, loaded: bgFrontLoaded, xOffset: bgFrontX, y: frontY, h: FRONT_H, layer: 'front' });
-  }
-
-  function drawGround() {
-    ctx.fillStyle = GROUND_COLOR; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    const dashW = 32, dashH = 3, gap = 20;
-    const offset = -((performance.now() * RUN_SPEED * 0.002) % (dashW + gap));
-    ctx.globalAlpha = 0.35; ctx.fillStyle = '#9ca3af';
-    for (let x = offset; x < W + dashW; x += dashW + gap) ctx.fillRect(x, GROUND_Y + 18, dashW, dashH);
-    ctx.globalAlpha = 1;
-  }
-
-  function drawObstacle(o) {
-    ctx.fillStyle = o.color;
-    if (o.type === 'emu') {
-      ctx.fillRect(o.x, o.y, o.w, o.h - 12);
-      ctx.fillRect(o.x + o.w - 12, o.y - 8, 12, 12);
-    } else if (o.type === 'roo') {
-      roundedRect(o.x, o.y + 6, o.w, o.h - 6, 8); ctx.fill();
-      ctx.fillRect(o.x + o.w - 10, o.y - 6, 10, 12);
-    } else {
-      roundedRect(o.x, o.y + 8, o.w, o.h - 8, 6); ctx.fill();
-    }
-  }
+@@ -431,94 +420,211 @@
 
   function drawRoo(){
     const sinVal = Math.sin(roo.bobT);
@@ -453,50 +269,167 @@
     ctx.beginPath(); ctx.ellipse(x + ROO.w*0.5, GROUND_Y - 2, ROO.w*0.45, 4, 0, 0, Math.PI*2);
     ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fill(); ctx.restore();
 
-    if (rooImgLoaded && rooImg){
-      const tilt = !roo.grounded ? (roo.vy < 0 ? ROO_IMG_TILT.up : ROO_IMG_TILT.down) : (-sinVal * 0.12);
-      let scaleX = 1, scaleY = 1;
+    drawStylizedRoo(x, y, sinVal, roo.vy, roo.grounded, roo.landT);
+  }
 
-      if (roo.grounded) {
-        scaleY = 1 + Math.abs(sinVal) * 0.16;
-        scaleX = 1 - Math.abs(sinVal) * 0.09;
-        if (roo.landT > 0) {
-          scaleY *= (1 - roo.landT * 1.2);
-          scaleX *= (1 + roo.landT * 0.6);
-        }
-      } else {
-        const stretch = Math.abs(roo.vy) / 500;
-        scaleY = 1 - stretch * 0.16;
-        scaleX = 1 + stretch * 0.06;
-        if (roo.vy < 0) { scaleY = 1 + stretch * 0.16; scaleX = 1 - stretch * 0.06; }
-      }
+  function drawStylizedRoo(x, y, strideSin, vy, grounded, landT) {
+    const cx = x + ROO.w * 0.48;
+    const cy = y + ROO.h * 0.54;
+    const tilt = clamp(grounded ? -strideSin * 0.12 : (vy < 0 ? ROO_TILT.up : ROO_TILT.down), -ROO_TILT.max, ROO_TILT.max);
+    const impact = landT > 0 ? clamp(landT * 5, 0, 1) : 0;
+    const strideMag = Math.abs(strideSin);
+    const crouch = grounded ? Math.min(1, strideMag * 0.6 + impact * 0.8) : 0;
+    const airStretch = clamp(Math.abs(vy) / 900, 0, 0.45);
+    let scaleX = 1;
+    let scaleY = 1;
 
-      ctx.save();
-      const cx = x + ROO.w/2, cy = y + ROO.h/2;
-      ctx.translate(cx, cy);
-      ctx.scale(scaleX, scaleY);
-      ctx.rotate(clamp(tilt, -ROO_IMG_TILT.max, ROO_IMG_TILT.max));
-
-      const frameW = rooImg.width / ROO_FRAMES;
-      const frameH = rooImg.height;
-      let frameIndex = 0;
-      if (ROO_FRAMES > 1) {
-        const walk = Math.floor(roo.bobT * 8);
-        frameIndex = roo.grounded
-          ? (walk % ROO_FRAMES)
-          : (roo.vy < 0 ? Math.floor(ROO_FRAMES * 0.25) : Math.floor(ROO_FRAMES * 0.75));
-      }
-      ctx.drawImage(rooImg, frameIndex * frameW, 0, frameW, frameH, -ROO.w/2 + ROO_IMG_OFFSET.x, -ROO.h/2 + ROO_IMG_OFFSET.y, ROO.w, ROO.h);
-
-      ctx.restore();
+    if (grounded) {
+      scaleX += crouch * 0.28;
+      scaleY -= crouch * 0.32;
+    } else if (vy < 0) {
+      scaleX -= airStretch * 0.18;
+      scaleY += airStretch * 0.35;
     } else {
-      // Fallback green roo
-      ctx.fillStyle = KANGAROO_COLOR;
-      roundedRect(x + 10, y + 6, ROO.w - 20, ROO.h - 6, 12); ctx.fill();
-      ctx.fillRect(x + ROO.w - 28, y - 10, 28, 28);
-      ctx.fillRect(x + ROO.w - 18, y - 25, 12, 18);
-      ctx.fillRect(x, y + 12, 18, 8);
+      scaleX += airStretch * 0.2;
+      scaleY -= airStretch * 0.28;
     }
+
+    ctx.save();
+    ctx.translate(cx, cy - crouch * 6);
+    ctx.rotate(tilt);
+    ctx.scale(scaleX, scaleY);
+
+    const swing = clamp(strideSin * (grounded ? 1 : 0.4), -1, 1);
+
+    const drawLeg = (offsetX, offsetY, angle, front) => {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.rotate(angle);
+      const len = ROO.h * 0.42;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(len * 0.14, len * 0.34, len * 0.22, len * 0.68);
+      ctx.quadraticCurveTo(len * 0.32, len * 0.9, len * 0.02, len * 0.96);
+      ctx.quadraticCurveTo(-len * 0.18, len * 0.78, -len * 0.08, len * 0.46);
+      ctx.closePath();
+      ctx.fillStyle = front ? ROO_COLORS.mid : ROO_COLORS.dark;
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const drawArm = (offsetX, offsetY, angle, front) => {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.rotate(angle);
+      const len = ROO.h * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(len * 0.24, len * 0.26, len * 0.12, len * 0.6);
+      ctx.quadraticCurveTo(-len * 0.04, len * 0.64, -len * 0.12, len * 0.36);
+      ctx.closePath();
+      ctx.fillStyle = front ? ROO_COLORS.mid : mix(ROO_COLORS.mid, ROO_COLORS.dark, 0.6);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const backLegAngle = 1.08 + swing * 0.32 + crouch * 0.12 - (grounded ? 0 : airStretch * 0.4);
+    const frontLegAngle = 0.86 - swing * 0.42 - crouch * 0.08 + (grounded ? 0 : airStretch * 0.22);
+    drawLeg(-ROO.w * 0.02, ROO.h * 0.14, backLegAngle, false);
+    drawLeg(ROO.w * 0.18, ROO.h * 0.18 - crouch * 6, frontLegAngle, true);
+
+    const armSwing = swing * (grounded ? 0.8 : 0.35);
+    drawArm(ROO.w * 0.14, -ROO.h * 0.04, -1.05 - armSwing * 0.18 - crouch * 0.12, false);
+    drawArm(ROO.w * 0.26, -ROO.h * 0.02 - crouch * 4, -0.7 + armSwing * 0.32 - crouch * 0.08, true);
+
+    // Tail
+    ctx.beginPath();
+    ctx.moveTo(-ROO.w * 0.42, ROO.h * 0.02);
+    ctx.quadraticCurveTo(-ROO.w * 0.72, -ROO.h * 0.12, -ROO.w * 0.52, -ROO.h * 0.42);
+    ctx.quadraticCurveTo(-ROO.w * 0.18, -ROO.h * 0.26, -ROO.w * 0.12, -ROO.h * 0.04);
+    ctx.quadraticCurveTo(-ROO.w * 0.36, ROO.h * 0.18, -ROO.w * 0.04, ROO.h * 0.28);
+    ctx.closePath();
+    ctx.fillStyle = ROO_COLORS.dark;
+    ctx.fill();
+
+    // Body
+    ctx.beginPath();
+    ctx.moveTo(-ROO.w * 0.12, -ROO.h * 0.26);
+    ctx.quadraticCurveTo(ROO.w * 0.36, -ROO.h * 0.44, ROO.w * 0.44, ROO.h * 0.02);
+    ctx.quadraticCurveTo(ROO.w * 0.46, ROO.h * 0.38, -ROO.w * 0.1, ROO.h * 0.32);
+    ctx.quadraticCurveTo(-ROO.w * 0.3, ROO.h * 0.18, -ROO.w * 0.18, -ROO.h * 0.12);
+    ctx.closePath();
+    ctx.fillStyle = ROO_COLORS.base;
+    ctx.fill();
+
+    // Belly
+    ctx.beginPath();
+    ctx.moveTo(ROO.w * 0.08, -ROO.h * 0.12);
+    ctx.quadraticCurveTo(ROO.w * 0.32, -ROO.h * 0.04, ROO.w * 0.28, ROO.h * 0.24);
+    ctx.quadraticCurveTo(ROO.w * 0.02, ROO.h * 0.32, -ROO.w * 0.04, ROO.h * 0.12);
+    ctx.closePath();
+    ctx.fillStyle = ROO_COLORS.belly;
+    ctx.fill();
+
+    // Head & features
+    const headBob = grounded ? swing * 4 : vy * 0.01;
+    ctx.save();
+    ctx.translate(ROO.w * 0.36, -ROO.h * 0.3 - headBob);
+    ctx.rotate(clamp(tilt * 0.6, -0.32, 0.32));
+
+    const earTilt = -0.4 + swing * 0.1;
+    const drawEar = (offsetX, offsetY, flip) => {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(flip ? -1 : 1, 1);
+      ctx.rotate(earTilt + (flip ? 0.14 : -0.04));
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(-ROO.w * 0.04, -ROO.h * 0.3, ROO.w * 0.06, -ROO.h * 0.34);
+      ctx.quadraticCurveTo(ROO.w * 0.1, -ROO.h * 0.12, 0, 0);
+      ctx.closePath();
+      ctx.fillStyle = ROO_COLORS.base;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(ROO.w * 0.01, -ROO.h * 0.04);
+      ctx.quadraticCurveTo(-ROO.w * 0.02, -ROO.h * 0.22, ROO.w * 0.04, -ROO.h * 0.26);
+      ctx.quadraticCurveTo(ROO.w * 0.05, -ROO.h * 0.12, ROO.w * 0.01, -ROO.h * 0.04);
+      ctx.closePath();
+      ctx.fillStyle = mix(ROO_COLORS.belly, '#fde68a', 0.4);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    drawEar(-ROO.w * 0.04, -ROO.h * 0.02, false);
+    drawEar(-ROO.w * 0.12, -ROO.h * 0.04, true);
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, ROO.w * 0.22, ROO.h * 0.18, 0, 0, Math.PI * 2);
+    ctx.fillStyle = ROO_COLORS.base;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(ROO.w * 0.08, ROO.h * 0.02, ROO.w * 0.1, ROO.h * 0.08, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mix(ROO_COLORS.base, '#ffffff', 0.35);
+    ctx.fill();
+
+    ctx.fillStyle = ROO_COLORS.accent;
+    ctx.beginPath();
+    ctx.arc(ROO.w * 0.04, -ROO.h * 0.02, 3.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(ROO.w * 0.036, -ROO.h * 0.028, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = ROO_COLORS.accent;
+    ctx.beginPath();
+    ctx.arc(ROO.w * 0.14, ROO.h * 0.04, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+    ctx.restore();
   }
 
   // ===== Utils =====
@@ -522,14 +455,7 @@
         console.error('Image failed to load:', url, e);
         rej(e);
       };
-      im.src = url;
-    });
-  }
-
-  async function loadStripWithChroma(url, keyRGB, tol){
-    const img = await loadImage(url);
-    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-    const g = c.getContext('2d', { willReadFrequently:true });
+@@ -533,52 +639,53 @@
     g.drawImage(img, 0, 0);
     const d = g.getImageData(0,0,c.width,c.height), a = d.data;
     const [kr,kg,kb] = keyRGB;
@@ -555,8 +481,9 @@
     const srcW = src.width;
     const tileW = srcW * scale;
     const fade = FADE_W * scale;
-    const repeatDist = tileW - fade;
-    let x = -((xOffset % repeatDist) + repeatDist);
+    const repeatDist = Math.max(1, tileW - fade);
+    const offset = ((xOffset % repeatDist) + repeatDist) % repeatDist;
+    let x = Math.round(-offset);
 
     for (let i=0; x < W + tileW; i++, x += repeatDist){
       if (layer==='back' && !BG_BACK_URL){ ctx.filter='blur(1.2px) saturate(0.88)'; ctx.globalAlpha=0.94; }
@@ -581,72 +508,3 @@
 
     let seed = (Math.random() * 1e9) | 0;
     const rng = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
-
-    const count = Math.floor((tileW / 34) * density);
-    for (let i = 0; i < count; i++) {
-      const baseX = (i * (tileW / count)) + rng() * 20;
-      const spread = 20 + rng() * 32;
-      const trunkW = 7 + rng() * 6;
-      const height = (h * (distant ? 0.38 : 0.58)) + rng() * (h * (distant ? 0.14 : 0.22));
-      const baseY = h;
-
-      const gx = baseX + spread * 0.45;
-      const gyTop = baseY - height;
-      const trunkGrad = gc.createLinearGradient(0, gyTop, 0, baseY);
-      trunkGrad.addColorStop(0, pal.trunkLight);
-      trunkGrad.addColorStop(1, pal.trunkDark);
-      gc.fillStyle = trunkGrad;
-      gc.fillRect(gx - trunkW/2, gyTop, trunkW, height);
-
-      const cx = baseX;
-      const cy = gyTop + height * (distant ? 0.32 : 0.25);
-
-      paintFoliage(gc, cx, cy, spread, height * 0.65, pal, distant);
-      paintFoliage(gc, cx + rng()*4 - 2, cy - height*0.08, spread*0.88, height*0.55, pal, distant);
-      paintFoliage(gc, cx + rng()*6 - 3, cy - height*0.15, spread*0.75, height*0.45, pal, distant);
-
-      gc.save();
-      gc.globalAlpha = distant ? 0.08 : 0.14;
-      gc.filter = 'blur(1.2px)';
-      roundedRect(baseX - spread * 0.25, h - 4, spread * 1.5, 5, 3); gc.fillStyle = pal.shadow; gc.fill();
-      gc.restore();
-    }
-
-    addEdgeFades(c, FADE_W);
-    return { canvas: c, w: tileW, h };
-  }
-
-  function paintFoliage(gc, cx, cy, w, h, pal, distant) {
-    const layers = distant ? 2 : 3;
-    for (let l = 0; l < layers; l++) {
-      const scale = 1 - l * 0.25;
-      const alpha = 1 - l * 0.3;
-      gc.globalAlpha = alpha * (distant ? 0.7 : 1);
-      gc.fillStyle = l === 0 ? pal.leafDark : (l === 1 ? pal.leafMid : pal.leafLight);
-      organicBlob(gc, cx + (Math.random()-0.5)*w*0.1, cy, w * scale, h * scale);
-      gc.fill();
-    }
-    gc.globalAlpha = 1;
-  }
-
-  function organicBlob(gc, cx, cy, w, h) {
-    gc.beginPath();
-    gc.moveTo(cx - w/2, cy);
-    gc.bezierCurveTo(cx - w*0.55, cy - h*0.35, cx - w*0.25, cy - h*0.75, cx, cy - h*0.7);
-    gc.bezierCurveTo(cx + w*0.25, cy - h*0.75, cx + w*0.55, cy - h*0.35, cx + w/2, cy);
-    gc.bezierCurveTo(cx + w*0.55, cy + h*0.35, cx + w*0.25, cy + h*0.5, cx, cy + h*0.45);
-    gc.bezierCurveTo(cx - w*0.25, cy + h*0.5, cx - w*0.55, cy + h*0.35, cx - w/2, cy);
-    gc.closePath();
-  }
-
-  function mix(hex, hex2, t) {
-    const a = parseInt(hex.slice(1),16), b = parseInt(hex2.slice(1),16);
-    const r = (a>>16)&255, g=(a>>8)&255, bl=a&255;
-    const r2=(b>>16)&255, g2=(b>>8)&255, bl2=b&255;
-    const rr = Math.round(r + (r2-r)*t), gg=Math.round(g+(g2-g)*t), bb=Math.round(bl+(bl2-bl)*t);
-    return `#${((1<<24)+(rr<<16)+(gg<<8)+bb).toString(16).slice(1)}`;
-  }
-})();
-</script>
-</body>
-</html>
