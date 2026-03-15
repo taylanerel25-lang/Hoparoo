@@ -77,7 +77,7 @@ const DAILIES = [
 function getDaily(){ const d=new Date(), seed=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate(); return DAILIES[seed%DAILIES.length]; }
 
 // ── Persistence ─────────────────────────────────────────────────
-const SAVE_VER = 3;
+const SAVE_VER = 4;
 function load(){
   try{
     const d=JSON.parse(localStorage.getItem("voidrun")||"{}");
@@ -89,6 +89,8 @@ function load(){
       if(d.activeZone==null)           d.activeZone=0;
       if(d.decentRunCount==null)       d.decentRunCount=0;
       if(d.graduatedOnboarding==null)  d.graduatedOnboarding=false;
+      if(d.loginStreak==null)          d.loginStreak=1;
+      if(!d.lastLoginDate)             d.lastLoginDate="";
       d.saveVer=SAVE_VER;
     }
     return d;
@@ -101,6 +103,8 @@ function App(){
   const [ui, setUi] = useState({
     state:"idle", score:0, best:0, streak:0, multiplier:1, shielded:false,
     tier:"CADET", nextTier:"PILOT", nextMin:15, dailyDone:false,
+    multTimer:0, multMax:0, pbPace:false, reviveReady:false,
+    loginStreak:1, streakMilestone:"",
     ds:0, dStreak:0, dSurvival:0, dClean:0, dTip:"",
     newBest:false, delta:0, pbStreak:0, pbSurvival:0,
     deathOverlay:false, lastScore:-1,
@@ -147,8 +151,17 @@ function App(){
     let totalRuns=sv.totalRuns||0, recentRuns=sv.recentRuns||[];
     let diffMod=sv.diffMod||0;
     let dDate=sv.dDate||"", dDone=sv.dDone||false;
+    let loginStreak=sv.loginStreak||1, lastLoginDate=sv.lastLoginDate||"";
     const todayStr=new Date().toDateString();
     if(dDate!==todayStr){ dDone=false; dDate=todayStr; }
+    if(lastLoginDate!==todayStr){
+      if(lastLoginDate){
+        const prev=new Date(lastLoginDate), now=new Date(todayStr);
+        const dayGap=Math.round((now-prev)/(1000*60*60*24));
+        loginStreak=dayGap===1?loginStreak+1:1;
+      } else loginStreak=1;
+      lastLoginDate=todayStr;
+    }
 
     // ── Cosmetics ────────────────────────────────────────────
     let unlockedSkins  = sv.unlockedSkins  || [0];
@@ -167,7 +180,7 @@ function App(){
       saveToDisk({
         bScore,bStreak,bSurvival,bClean,totalRuns,recentRuns,diffMod,dDate,dDone,
         unlockedSkins,activeSkin,unlockedTrails,activeTrail,activeZone,
-        decentRunCount,graduatedOnboarding,
+        decentRunCount,graduatedOnboarding,loginStreak,lastLoginDate,
       });
     }
 
@@ -193,8 +206,7 @@ function App(){
       } else {
         consecutiveAbove=0; diffMod*=0.93;
       }
-
-      // Rubber band: wider gaps next run after big streak loss
+@@ -198,107 +211,134 @@ function App(){
       if(prevRunStreak>=6 && score<20){
         diffMod=Math.max(-1, diffMod-0.3);
       }
@@ -220,7 +232,7 @@ function App(){
 
     // ── Game vars ────────────────────────────────────────────
     let state="idle", shipY=H/2, shipVY=0;
-    let trail=[], obstacles=[], pickups=[], particles=[];
+    let trail=[], obstacles=[], pickups=[], particles=[], floatTexts=[];
     let tick=0, rawScore=0, speed=1.6;
     let spawnT=0, spawnI=155, deathT=0, engFlick=0;
     let streak=0, bestStrRun=0, cleanPasses=0, survTime=0, pickupsColl=0;
@@ -230,9 +242,35 @@ function App(){
     let heat=0, obstCount=0, milestoneCount=0;
     let bnMsg="", bnT=0, bnCol="#00FFFF";
     let uiThrottle=0;
-    let streakPBFired=false;
+    let streakPBFired=false, reviveAvailable=true, reviveWindow=0, pendingHit=false;
 
     function bn(msg,col="#00FFFF",dur=85){ bnMsg=msg; bnT=dur; bnCol=col; }
+
+    function finalizeDeath(dispScore, tipOverride=""){
+      state="dead"; deathT=0;
+      const nb=dispScore>bScore, delta=nb?0:bScore-dispScore;
+      prevRunStreak=bestStrRun;
+      updateDiff(dispScore);
+      bScore=Math.max(bScore,dispScore);
+      bStreak=Math.max(bStreak,bestStrRun); bSurvival=Math.max(bSurvival,survTime); bClean=Math.max(bClean,cleanPasses);
+      checkUnlocks(dispScore, bestStrRun, survTime);
+      persist();
+      setHum(speed,false); explode(SHIP_X,shipY); sndDie();
+      shake=5;
+      const tip=tipOverride||(
+        survTime<8?"TIP: HOLD LONGER — LET THE SHIP FLOAT":
+        cleanPasses<3?"TIP: AIM FOR THE CENTER OF THE GAP":
+        streak>4?"GREAT STREAK — AIM HIGHER NEXT RUN":
+        !nb&&delta<=5?"SO CLOSE — ONE MORE GO":
+        "KEEP THE STREAK ALIVE"
+      );
+      setUi(u=>({...u,state:"dead",score:dispScore,best:bScore,
+        ds:dispScore,dStreak:bestStrRun,dSurvival:Math.floor(survTime),dClean:cleanPasses,
+        newBest:nb,delta,dTip:tip,pbStreak:bStreak,pbSurvival:Math.floor(bSurvival),
+        dailyDone:dDone,deathOverlay:false,lastScore:dispScore,reviveReady:false,
+      }));
+      setTimeout(()=>setUi(u=>u.state==="dead"?{...u,deathOverlay:true}:u), 340);
+    }
 
     // Stars — 3 depth layers
     const stars=Array.from({length:210},()=>({
@@ -254,14 +292,14 @@ function App(){
 
     // ── Reset ────────────────────────────────────────────────
     function reset(){
-      shipY=H/2; shipVY=0; trail=[]; obstacles=[]; pickups=[]; particles=[];
+      shipY=H/2; shipVY=0; trail=[]; obstacles=[]; pickups=[]; particles=[]; floatTexts=[];
       tick=0; rawScore=0; speed=1.6; spawnT=0; spawnI=155; deathT=0;
       streak=0; bestStrRun=0; cleanPasses=0; survTime=0; pickupsColl=0;
       mult=1; multT=0; shielded=false; shieldT=0;
       goalIdx=0; goalDone=false;
       shake=0; closeShow=0;
       heat=0; obstCount=0; milestoneCount=0; bnMsg=""; bnT=0;
-      streakPBFired=false;
+      streakPBFired=false; reviveAvailable=true; reviveWindow=0; pendingHit=false;
       totalRuns++;
     }
 
@@ -276,7 +314,8 @@ function App(){
       if(milestone){ milestoneCount++; bn("GATE "+milestoneCount*25,"#FFD700",55); }
       obstCount++;
       if(Math.random()<0.33){
-        const type=Math.random()<0.5?"score":Math.random()<0.6?"mult":"shield";
+        const roll=Math.random();
+        const type=roll<0.5?"score":roll<0.8?"mult":"shield";
         const risk=Math.random();
         const py=risk<0.38 ? gapY+GAP/2 : risk<0.65 ? gapY+GAP*0.2 : gapY+GAP*0.8;
         pickups.push({x:W+28, y:py, type, collected:false, pulse:0});
@@ -302,247 +341,7 @@ function App(){
     // ── Draw ship ────────────────────────────────────────────
     function drawShip(x,y,vy,alpha,skinIdx){
       const si = skinIdx!=null ? skinIdx : activeSkin;
-      const sk = SKINS[si] || SKINS[0];
-      const tilt=Math.max(-0.28,Math.min(0.28,vy*0.045));
-      const savedFlick=engFlick;
-      if(skinIdx==null) engFlick=(engFlick+0.18)%(Math.PI*2);
-      const fl=0.85+0.15*Math.sin(engFlick);
-      ctx.save(); ctx.globalAlpha=alpha; ctx.translate(x,y); ctx.rotate(tilt);
-
-      if(shielded&&skinIdx==null){
-        ctx.beginPath(); ctx.arc(2,0,33,0,Math.PI*2);
-        ctx.strokeStyle=`rgba(0,255,160,${0.35+0.2*Math.sin(Date.now()*0.005)})`;
-        ctx.lineWidth=2; ctx.shadowBlur=14; ctx.shadowColor="#00ffb3"; ctx.stroke();
-      }
-
-      const hg=48+heat*22;
-      ctx.shadowBlur=hg; ctx.shadowColor=sk.shadow;
-
-      // Fuselage
-      ctx.beginPath();
-      ctx.moveTo(28,0);ctx.lineTo(14,-5);ctx.lineTo(-2,-8);ctx.lineTo(-18,-10);
-      ctx.lineTo(-20,0);ctx.lineTo(-18,10);ctx.lineTo(-2,8);ctx.lineTo(14,5);ctx.closePath();
-      const hull=ctx.createLinearGradient(-20,-10,28,10);
-      hull.addColorStop(0,sk.h1); hull.addColorStop(0.4,sk.h2); hull.addColorStop(1,sk.h3);
-      ctx.fillStyle=hull; ctx.fill();
-      // White halo outline
-      ctx.shadowBlur=0; ctx.strokeStyle="rgba(255,255,255,0.18)"; ctx.lineWidth=1.5; ctx.stroke();
-
-      // Ridge
-      ctx.beginPath();ctx.moveTo(20,-2);ctx.lineTo(6,-6);ctx.lineTo(-14,-7);ctx.lineTo(-18,-4);ctx.lineTo(-6,-5);ctx.lineTo(10,-3);ctx.closePath();
-      ctx.fillStyle="rgba(160,210,255,0.42)"; ctx.fill();
-
-      // Top wing
-      ctx.beginPath();ctx.moveTo(6,-8);ctx.lineTo(-4,-22);ctx.lineTo(-14,-22);ctx.lineTo(-18,-10);ctx.lineTo(-2,-8);ctx.closePath();
-      const wt=ctx.createLinearGradient(0,-22,0,-8); wt.addColorStop(0,sk.wing); wt.addColorStop(1,sk.h2);
-      ctx.fillStyle=wt; ctx.shadowBlur=8; ctx.shadowColor=sk.shadow; ctx.fill();
-      ctx.beginPath();ctx.moveTo(2,-10);ctx.lineTo(-6,-20);ctx.lineTo(-10,-20);ctx.lineTo(-4,-10);ctx.closePath();
-      ctx.fillStyle=sk.wAccent; ctx.fill();
-
-      // Bottom wing
-      ctx.beginPath();ctx.moveTo(6,8);ctx.lineTo(-4,22);ctx.lineTo(-14,22);ctx.lineTo(-18,10);ctx.lineTo(-2,8);ctx.closePath();
-      const wb=ctx.createLinearGradient(0,8,0,22); wb.addColorStop(0,sk.h2); wb.addColorStop(1,sk.wing);
-      ctx.fillStyle=wb; ctx.fill();
-      ctx.beginPath();ctx.moveTo(2,10);ctx.lineTo(-6,20);ctx.lineTo(-10,20);ctx.lineTo(-4,10);ctx.closePath();
-      ctx.fillStyle=sk.wAccent; ctx.fill();
-
-      // Cockpit
-      ctx.beginPath(); ctx.ellipse(14,0,8,4.5,0,0,Math.PI*2);
-      const cg=ctx.createRadialGradient(12,-1.5,0.5,14,0,8);
-      cg.addColorStop(0,"rgba(255,255,255,0.95)"); cg.addColorStop(0.4,"rgba(180,240,255,0.75)"); cg.addColorStop(1,"rgba(0,180,220,0.4)");
-      ctx.fillStyle=cg; ctx.shadowBlur=6; ctx.shadowColor="#aaf0ff"; ctx.fill();
-      ctx.beginPath(); ctx.ellipse(13,-1.5,3.5,1.5,-0.3,0,Math.PI*2); ctx.fillStyle="rgba(255,255,255,0.7)"; ctx.fill();
-
-      // Nacelles — boosted glow
-      [-6,6].forEach(ey=>{
-        ctx.beginPath(); ctx.ellipse(-15,ey,5,2.5,0,0,Math.PI*2); ctx.fillStyle="#b8d8f0"; ctx.shadowBlur=0; ctx.fill();
-        ctx.beginPath(); ctx.ellipse(-19,ey,2.8,2,0,0,Math.PI*2);
-        ctx.fillStyle=`rgba(${sk.eR},${sk.eG},${sk.eB},${0.8*fl})`; ctx.shadowBlur=18*fl; ctx.shadowColor=sk.shadow; ctx.fill();
-      });
-
-      // Main engine — boosted glow
-      ctx.beginPath(); ctx.ellipse(-18,0,4.5,3.5,0,0,Math.PI*2); ctx.fillStyle="#cce8ff"; ctx.shadowBlur=0; ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-20,0,3.2,2.4,0,0,Math.PI*2);
-      ctx.fillStyle=`rgba(${sk.eR},${sk.eG},${sk.eB},${fl})`; ctx.shadowBlur=28*fl; ctx.shadowColor=sk.shadow; ctx.fill();
-
-      if(skinIdx!=null) engFlick=savedFlick;
-      ctx.restore();
-    }
-
-    function drawFlame(x,y,vy){
-      const sk=SKINS[activeSkin]||SKINS[0];
-      const tilt=Math.max(-0.28,Math.min(0.28,vy*0.045));
-      const flen=pressing?24+Math.random()*10:13+Math.random()*6;
-      ctx.save(); ctx.translate(x,y); ctx.rotate(tilt);
-      const fg=ctx.createLinearGradient(0,0,-(flen+12),0);
-      fg.addColorStop(0,`rgba(${sk.eR},${sk.eG},${sk.eB},${0.9+0.1*Math.sin(engFlick)})`);
-      fg.addColorStop(0.3,"rgba(0,160,255,0.55)"); fg.addColorStop(0.7,"rgba(80,0,255,0.22)"); fg.addColorStop(1,"rgba(0,0,200,0)");
-      ctx.shadowBlur=18; ctx.shadowColor=sk.shadow; ctx.fillStyle=fg;
-      ctx.beginPath(); ctx.ellipse(-(flen/2)-18,0,flen/2,pressing?7:4.5,0,0,Math.PI*2); ctx.fill();
-      [-6,6].forEach(ey=>{
-        const nfl=10+Math.random()*5+(pressing?5:0);
-        const nfg=ctx.createLinearGradient(0,0,-nfl-19,0);
-        nfg.addColorStop(0,`rgba(${sk.eR},${sk.eG},${sk.eB},0.7)`); nfg.addColorStop(1,"rgba(0,100,255,0)");
-        ctx.fillStyle=nfg; ctx.shadowBlur=8;
-        ctx.beginPath(); ctx.ellipse(-(nfl/2)-19,ey,nfl/2,2.5,0,0,Math.PI*2); ctx.fill();
-      });
-      ctx.restore();
-    }
-
-    function drawObs(obs){
-      const zn=ZONES[activeZone]||ZONES[0];
-      const hw=20,lx=obs.x-hw,rw=hw*2,botY=obs.gapY+obs.GAP;
-      const gc=obs.milestone
-        ? `rgba(255,200,0,0.95)`
-        : `rgba(0,${Math.floor(200+heat*55)},255,0.95)`;
-      ctx.save();
-      ctx.fillStyle="#081525"; ctx.fillRect(lx,0,rw,obs.gapY); ctx.fillRect(lx,botY,rw,H-botY);
-      ctx.strokeStyle="rgba(0,180,255,0.05)"; ctx.lineWidth=1;
-      for(let yy=16;yy<obs.gapY-4;yy+=20){ctx.beginPath();ctx.moveTo(lx+5,yy);ctx.lineTo(lx+rw-5,yy);ctx.stroke();}
-      for(let yy=botY+16;yy<H-4;yy+=20){ctx.beginPath();ctx.moveTo(lx+5,yy);ctx.lineTo(lx+rw-5,yy);ctx.stroke();}
-      if(zn.obsRim&&!obs.milestone){
-        ctx.strokeStyle=zn.obsRim; ctx.lineWidth=3;
-        ctx.strokeRect(lx-1,0,rw+2,obs.gapY); ctx.strokeRect(lx-1,botY,rw+2,H-botY);
-      } else if(!obs.milestone) {
-        ctx.strokeStyle="rgba(0,200,255,0.1)"; ctx.lineWidth=1;
-        ctx.strokeRect(lx,0,rw,obs.gapY); ctx.strokeRect(lx,botY,rw,H-botY);
-      }
-      ctx.shadowBlur=obs.milestone?28:18+heat*10; ctx.shadowColor=obs.milestone?"#FFD700":"#00FFFF";
-      ctx.strokeStyle=gc; ctx.lineWidth=3.5;
-      ctx.beginPath();ctx.moveTo(lx-1,obs.gapY);ctx.lineTo(lx+rw+1,obs.gapY);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(lx-1,botY);ctx.lineTo(lx+rw+1,botY);ctx.stroke();
-      ctx.fillStyle=gc; ctx.shadowBlur=10;
-      [[lx+5,obs.gapY],[lx+rw-5,obs.gapY],[lx+5,botY],[lx+rw-5,botY]].forEach(([cx,cy])=>{
-        ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();
-      });
-      ctx.restore();
-    }
-
-    function drawPickup(p){
-      p.pulse+=0.08;
-      const g=0.7+0.3*Math.sin(p.pulse);
-      const col=p.type==="score"?"#00FFFF":p.type==="mult"?"#FFD700":"#00FF99";
-      const lbl=p.type==="score"?"S":p.type==="mult"?"2x":"*";
-      ctx.save(); ctx.translate(p.x,p.y);
-      ctx.shadowBlur=16*g; ctx.shadowColor=col;
-      ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.globalAlpha=0.55+0.3*g; ctx.stroke();
-      ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fillStyle=col; ctx.globalAlpha=1; ctx.fill();
-      ctx.fillStyle="#000"; ctx.font="bold 7px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lbl,0,0.5);
-      ctx.restore();
-    }
-
-    function gProg(){
-      const g=GOALS[goalIdx%GOALS.length]; if(!g)return 0;
-      return Math.min(1,
-        g.key==="survival"?survTime/g.target:
-        g.key==="clean"   ?cleanPasses/g.target:
-        g.key==="score"   ?(rawScore/10)/g.target:
-        g.key==="streak"  ?streak/g.target:
-        pickupsColl/g.target);
-    }
-    function checkGoal(){
-      if(goalDone)return;
-      if(gProg()>=1){
-        goalDone=true; sndCheer(); rawScore+=500;
-        bn("GOAL: "+GOALS[goalIdx%GOALS.length].desc.toUpperCase()+"  +"+(50*mult),"#00FFFF",120);
-        burst(SHIP_X,shipY,20);
-        setTimeout(()=>{ goalDone=false; goalIdx++; },1900);
-      }
-    }
-
-    // ── Main loop ────────────────────────────────────────────
-    function loop(){
-      const sx=shake>0?(Math.random()-0.5)*shake*3:0;
-      const sy=shake>0?(Math.random()-0.5)*shake*3:0;
-      if(shake>0) shake=Math.max(0,shake-0.5);
-
-      ctx.save(); ctx.translate(sx,sy);
-      ctx.fillStyle="#00000e"; ctx.fillRect(-20,-20,W+40,H+40);
-
-      // Speed lines
-      if(state==="playing"&&heat>0.05){
-        const lineAlpha=heat*0.18;
-        ctx.save(); ctx.globalAlpha=lineAlpha;
-        speedLineSeeds.forEach((sl)=>{
-          sl.y=(sl.y+0.4*(1+heat))%H;
-          const lx=sl.side===0?0:W-sl.len-10;
-          ctx.strokeStyle="rgba(255,255,255,0.9)";
-          ctx.lineWidth=0.8; ctx.shadowBlur=0;
-          ctx.beginPath(); ctx.moveTo(lx,sl.y); ctx.lineTo(lx+sl.len,sl.y); ctx.stroke();
-        });
-        ctx.restore();
-      }
-
-      // Zone vignette
-      const zn=ZONES[activeZone]||ZONES[0];
-      const vigStr=activeZone===2
-        ? `rgba(${Math.floor(30+15*Math.sin(Date.now()*0.0015))},0,0,0.72)`
-        : zn.vig;
-      const vig=ctx.createRadialGradient(W/2,H/2,H*0.1,W/2,H/2,H*0.9);
-      vig.addColorStop(0,"rgba(0,0,0,0)"); vig.addColorStop(1,vigStr);
-      ctx.fillStyle=vig; ctx.fillRect(-20,-20,W+40,H+40);
-
-      // Danger vignette near walls
-      if(state==="playing"){
-        const dangerT=Math.max(0, 1-Math.min(shipY, H-shipY)/55)*0.15;
-        if(dangerT>0){
-          ctx.fillStyle=`rgba(200,0,0,${dangerT})`;
-          ctx.fillRect(-20,-20,W+40,H+40);
-        }
-      }
-
-      // Stars — dimmed 40%
-      const lspd=[0.12,0.35,0.8];
-      const zoneMult=zn.starMult;
-      stars.forEach(s=>{
-        s.tw+=0.007;
-        const a=s.a*(0.78+0.22*Math.sin(s.tw))*0.6;
-        if(state==="playing"){
-          s.x-=lspd[s.layer]*(speed/1.6)*(1+heat*0.75)*zoneMult;
-          if(s.x<-2){s.x=W+2;s.y=Math.random()*H;}
-        }
-        ctx.beginPath(); ctx.arc(s.x,s.y,s.r*[0.55,0.9,1.4][s.layer],0,Math.PI*2);
-        ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.fill();
-      });
-
-      // Nebulae
-      if(activeZone>=1){
-        nebulae.forEach(nb=>{
-          if(state==="playing"){ nb.x-=nb.spd*(activeZone===2?1.25:1); if(nb.x<-nb.r*2){ nb.x=W+nb.r; nb.y=Math.random()*H; } }
-          const col1=activeZone===2?"rgba(220,0,0,0.09)":"rgba(180,0,220,0.11)";
-          const col0=activeZone===2?"rgba(220,0,0,0)":"rgba(180,0,220,0)";
-          const ng=ctx.createRadialGradient(nb.x,nb.y,0,nb.x,nb.y,nb.r);
-          ng.addColorStop(0,col1); ng.addColorStop(1,col0);
-          ctx.fillStyle=ng; ctx.beginPath(); ctx.arc(nb.x,nb.y,nb.r,0,Math.PI*2); ctx.fill();
-        });
-      }
-
-      // ── Playing state ────────────────────────────────────
-      if(state==="playing"){
-        tick++; rawScore++; survTime=tick/60;
-        speed=1.6+tick*0.00028;
-        if(tick%1100===0&&spawnI>72) spawnI-=4;
-
-        const tgtHeat=Math.min(1,(speed-1.6)*1.2+streak*0.04);
-        heat+=(tgtHeat-heat)*0.008;
-
-        if(multT>0){ multT--; if(multT===0){mult=1; bn("MULTIPLIER ENDED","#888",60);} }
-        if(shieldT>0){ shieldT--; if(shieldT===0){shielded=false; bn("SHIELD DOWN","#ff4444",60);} }
-        if(bnT>0) bnT--;
-        if(closeShow>0) closeShow--;
-        setHum(speed,true);
-
-        shipVY+=pressing?THRUST:GRAVITY;
-        shipVY*=DAMPING;
-        shipVY=Math.max(-MAX_VY,Math.min(MAX_VY,shipVY));
-        shipY+=shipVY;
-        if(shipY<18){shipY=18;shipVY=Math.abs(shipVY)*0.15;}
-        if(shipY>H-18){shipY=H-18;shipVY=-Math.abs(shipVY)*0.15;}
-
-        trail.push({x:SHIP_X,y:shipY});
-        if(trail.length>30) trail.shift();
-
-        obstacles.forEach(o=>{
+@@ -546,137 +586,162 @@ function App(){
           if(o.drift){
             o.dOff+=o.dDir*0.28;
             if(Math.abs(o.dOff)>26) o.dDir*=-1;
@@ -568,12 +367,17 @@ function App(){
               const minD=Math.min(dTop,dBot)-HR;
               if(minD<15&&!o.nearMissed){
                 o.nearMissed=true;
-                closeShow=80; sndNear(); bn("CLOSE CALL!","#FFAA00",75);
+                closeShow=80; sndNear(); bn("CLOSE CALL! +10","#FFAA00",75);
+                rawScore+=100;
+                floatTexts.push({x:SHIP_X+28,y:shipY-18,text:"+10",col:"#FFAA00",life:50,vy:-0.45});
               }
             }
           }
           if(!o.scored&&o.x+20<SHIP_X-HR){
             o.scored=true; streak++; cleanPasses++;
+            const gatePts=streak>=10?25:streak>=5?10:5;
+            rawScore+=gatePts*10;
+            floatTexts.push({x:SHIP_X+24,y:shipY-10,text:"+"+gatePts,col:"#00FFFF",life:55,vy:-0.35});
             bestStrRun=Math.max(bestStrRun,streak); sndGate(streak);
             if(streak===3)  bn("3x STREAK!","#00FFFF",65);
             if(streak===5)  {bn("5x STREAK!","#FFD700",90);burst(SHIP_X,shipY,12);sndCheer();}
@@ -593,7 +397,12 @@ function App(){
           if(Math.sqrt(dx*dx+dy*dy)<18){
             p.collected=true; pickupsColl++; sndPickup(); burst(p.x,p.y,12);
             if(p.type==="score")  {rawScore+=300; bn("+30 SCORE SURGE!","#00FFFF",80);}
-            if(p.type==="mult")   {mult=2; multT=480; bn("2x MULTIPLIER  8 SECS!","#FFD700",90);}
+            if(p.type==="mult")   {
+              const roll=Math.random();
+              const nextMult=roll<0.70?2:roll<0.95?3:5;
+              mult=nextMult; multT=480;
+              bn(nextMult+"x MULTIPLIER  8 SECS!",nextMult>=5?"#FF66FF":"#FFD700",90);
+            }
             if(p.type==="shield") {shielded=true;shieldT=600;bn("SHIELD ACTIVE!","#00FF99",90);}
           }
         });
@@ -611,37 +420,37 @@ function App(){
         const dispScore=Math.floor(rawScore*mult/10);
 
         if(hit){
-          state="dead"; deathT=0;
-          const nb=dispScore>bScore, delta=nb?0:bScore-dispScore;
-          prevRunStreak=bestStrRun;
-          updateDiff(dispScore);
-          bScore=Math.max(bScore,dispScore);
-          bStreak=Math.max(bStreak,bestStrRun); bSurvival=Math.max(bSurvival,survTime); bClean=Math.max(bClean,cleanPasses);
-          checkUnlocks(dispScore, bestStrRun, survTime);
-          persist();
-          setHum(speed,false); explode(SHIP_X,shipY); sndDie();
-          shake=5;
-          const tip=survTime<8?"TIP: HOLD LONGER — LET THE SHIP FLOAT":
-                    cleanPasses<3?"TIP: AIM FOR THE CENTER OF THE GAP":
-                    streak>4?"GREAT STREAK — AIM HIGHER NEXT RUN":
-                    !nb&&delta<=5?"SO CLOSE — ONE MORE GO":
-                    "KEEP THE STREAK ALIVE";
-          setUi(u=>({...u,state:"dead",score:dispScore,best:bScore,
-            ds:dispScore,dStreak:bestStrRun,dSurvival:Math.floor(survTime),dClean:cleanPasses,
-            newBest:nb,delta,dTip:tip,pbStreak:bStreak,pbSurvival:Math.floor(bSurvival),
-            dailyDone:dDone,deathOverlay:false,lastScore:dispScore,
-          }));
-          setTimeout(()=>setUi(u=>u.state==="dead"?{...u,deathOverlay:true}:u), 340);
+          if(reviveAvailable){
+            reviveAvailable=false;
+            reviveWindow=120;
+            pendingHit=true;
+            state="dead"; deathT=0;
+            setHum(speed,false); sndDie();
+            bn("REVIVE AVAILABLE — PRESS TO CONTINUE","#00FF99",120);
+            setUi(u=>({...u,state:"dead",reviveReady:true,deathOverlay:false,lastScore:dispScore}));
+          } else {
+            finalizeDeath(dispScore);
+          }
         } else {
           if(++uiThrottle%8===0){
             setUi(u=>({...u,score:dispScore,streak,multiplier:mult,shielded,state:"playing",
               tier:getTier(dispScore).name,nextTier:getNextTier(dispScore)?.name||"",
               nextMin:getNextTier(dispScore)?.min||0,best:bScore,dailyDone:dDone,
+              multTimer:multT,multMax:480,pbPace:dispScore>bScore*(survTime/Math.max(1,bSurvival||1)),
             }));
           }
         }
       }
-      if(state==="dead") deathT++;
+      if(state==="dead"){
+        deathT++;
+        if(reviveWindow>0){
+          reviveWindow--;
+          if(reviveWindow===0&&pendingHit){
+            pendingHit=false;
+            finalizeDeath(Math.floor(rawScore*mult/10),"REVIVE MISSED — TAP FASTER NEXT TIME");
+          }
+        }
+      }
 
       // Trail
       trail.forEach((pt,i)=>{
@@ -654,6 +463,21 @@ function App(){
       if(state==="playing") drawFlame(SHIP_X,shipY,shipVY);
       obstacles.forEach(drawObs);
       pickups.forEach(drawPickup);
+
+      // Floating score text
+      floatTexts=floatTexts.filter(f=>f.life>0);
+      floatTexts.forEach(f=>{
+        f.y+=f.vy; f.life--;
+        ctx.save();
+        ctx.globalAlpha=Math.min(1,f.life/18);
+        ctx.font="700 11px 'Orbitron',sans-serif";
+        ctx.textAlign="center";
+        ctx.fillStyle=f.col;
+        ctx.shadowBlur=8;
+        ctx.shadowColor=f.col;
+        ctx.fillText(f.text,f.x,f.y);
+        ctx.restore();
+      });
 
       // Particles
       particles=particles.filter(p=>p.life>0);
@@ -680,106 +504,7 @@ function App(){
         }
         if(closeShow>0){
           const ca=Math.min(1,closeShow/12)*Math.min(1,(closeShow/40)*2.5);
-          ctx.save(); ctx.globalAlpha=ca;
-          ctx.font="900 18px 'Orbitron',sans-serif"; ctx.shadowBlur=22; ctx.shadowColor="#FFAA00"; ctx.fillStyle="#FFAA00";
-          ctx.fillText("CLOSE CALL",W/2,H/2-60); ctx.restore();
-        }
-        const gObj=GOALS[goalIdx%GOALS.length];
-        if(gObj){
-          const prog=gProg(), bw=175, bh=4, bx=W-bw-14, by=H-20;
-          ctx.save();
-          ctx.fillStyle="rgba(255,255,255,0.07)"; ctx.fillRect(bx,by,bw,bh);
-          ctx.fillStyle=goalDone?"#FFD700":"#00FFFF"; ctx.shadowBlur=5; ctx.shadowColor=goalDone?"#FFD700":"#00FFFF";
-          ctx.fillRect(bx,by,bw*prog,bh);
-          ctx.font="400 7px 'Orbitron',sans-serif"; ctx.textAlign="right";
-          ctx.fillStyle="rgba(255,255,255,0.26)"; ctx.shadowBlur=0;
-          ctx.fillText(gObj.desc,W-14,H-26); ctx.restore();
-        }
-      }
-      // ── IDLE SCREEN ─────────────────────────────────────
-      if(state==="idle"){
-        swatchHitboxes=[];
-        ctx.save(); ctx.textAlign="center";
-        ctx.font="900 54px 'Orbitron',sans-serif"; ctx.shadowBlur=42; ctx.shadowColor="#00FFFF"; ctx.fillStyle="#FFFFFF";
-        ctx.fillText("VOID RUN",W/2,H/2-46);
-        const lr=ctx.createLinearGradient(W/2-150,0,W/2+150,0);
-        lr.addColorStop(0,"rgba(0,255,255,0)"); lr.addColorStop(0.5,"rgba(0,255,255,0.35)"); lr.addColorStop(1,"rgba(0,255,255,0)");
-        ctx.strokeStyle=lr; ctx.lineWidth=1; ctx.shadowBlur=0;
-        ctx.beginPath(); ctx.moveTo(W/2-150,H/2-16); ctx.lineTo(W/2+150,H/2-16); ctx.stroke();
-
-        ctx.font="400 8px 'Orbitron',sans-serif"; ctx.shadowBlur=0;
-        if(!graduatedOnboarding){
-          ctx.fillStyle="rgba(0,255,160,0.65)"; ctx.shadowBlur=8; ctx.shadowColor="#00FF99";
-          ctx.fillText("FLIGHT ASSIST ACTIVE",W/2,H/2);
-        } else if(bScore>0){
-          ctx.fillStyle="rgba(0,230,255,0.35)";
-          ctx.fillText(getTier(bScore).name,W/2,H/2);
-        }
-        ctx.shadowBlur=0;
-
-        ctx.font="400 9px 'Orbitron',sans-serif"; ctx.fillStyle="rgba(0,230,255,0.4)";
-        ctx.fillText("HOLD SPACE · CLICK & HOLD · TAP",W/2,H/2+16);
-
-        if(bScore>0){
-          ctx.font="400 9px 'Orbitron',sans-serif";
-          ctx.fillStyle="rgba(255,255,255,0.22)";
-          ctx.fillText("BEST: "+String(bScore).padStart(6,"0"),W/2,H/2+34);
-        }
-
-        // Skin swatches
-        const skinY=H/2+62;
-        ctx.font="400 6px 'Orbitron',sans-serif"; ctx.fillStyle="rgba(255,255,255,0.18)";
-        ctx.fillText("SHIP",W/2,skinY-14);
-        SKINS.forEach((sk,i)=>{
-          const cx=W/2-(SKINS.length-1)*20+i*40;
-          const unlocked=unlockedSkins.includes(i);
-          const active=activeSkin===i;
-          ctx.save();
-          ctx.globalAlpha=unlocked?1:0.28;
-          ctx.beginPath(); ctx.arc(cx,skinY,14,0,Math.PI*2);
-          ctx.fillStyle=sk.wing;
-          if(active){ ctx.shadowBlur=18; ctx.shadowColor=sk.shadow; }
-          ctx.fill();
-          ctx.beginPath(); ctx.arc(cx,skinY,14,0,Math.PI*2);
-          ctx.strokeStyle=active?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.18)";
-          ctx.lineWidth=active?2:1; ctx.shadowBlur=0; ctx.stroke();
-          if(!unlocked){
-            ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fill();
-            ctx.font="9px monospace"; ctx.globalAlpha=0.55;
-            ctx.fillStyle="#fff"; ctx.fillText("?",cx,skinY+3.5);
-          }
-          ctx.restore();
-          swatchHitboxes.push({x:cx,y:skinY,r:16,action:()=>{
-            if(!unlocked) return;
-            activeSkin=i; persist();
-          }});
-        });
-
-        // Trail swatches
-        const trailY=H/2+95;
-        ctx.font="400 6px 'Orbitron',sans-serif"; ctx.fillStyle="rgba(255,255,255,0.18)"; ctx.shadowBlur=0;
-        ctx.fillText("TRAIL",W/2,trailY-12);
-        const tColors=["#00FFFF","#FFB300","#BB44FF"];
-        TRAIL_DEFS.forEach((tr,i)=>{
-          const cx=W/2-(TRAIL_DEFS.length-1)*24+i*48;
-          const unlocked=unlockedTrails.includes(i);
-          const active=activeTrail===i;
-          ctx.save();
-          ctx.globalAlpha=unlocked?1:0.28;
-          ctx.beginPath(); ctx.arc(cx,trailY,10,0,Math.PI*2);
-          ctx.fillStyle=tColors[i];
-          if(active){ ctx.shadowBlur=14; ctx.shadowColor=tColors[i]; }
-          ctx.fill();
-          ctx.beginPath(); ctx.arc(cx,trailY,10,0,Math.PI*2);
-          ctx.strokeStyle=active?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.18)";
-          ctx.lineWidth=active?2:1; ctx.shadowBlur=0; ctx.stroke();
-          if(!unlocked){ ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fill(); }
-          ctx.restore();
-          swatchHitboxes.push({x:cx,y:trailY,r:14,action:()=>{
-            if(!unlocked) return;
-            activeTrail=i; persist();
-          }});
-        });
+@@ -783,156 +848,184 @@ function App(){
 
         // Zone selector
         const maxUnlockedZone=decentRunCount>=10?2:decentRunCount>=4?1:0;
@@ -805,11 +530,24 @@ function App(){
 
     raf=requestAnimationFrame(loop);
 
+    const streakMilestone=loginStreak%7===0?"WEEKLY BONUS READY":loginStreak%3===0?"STREAK BONUS READY":"";
+    setUi(u=>({...u,loginStreak,streakMilestone,dailyDone:dDone}));
+
     // ── Input ────────────────────────────────────────────────
     function tryStart(){
+      if(state==="dead"&&pendingHit&&reviveWindow>0){
+        state="playing";
+        pendingHit=false;
+        reviveWindow=0;
+        streak=Math.max(1,Math.floor(streak/2));
+        shipVY=0;
+        bn("REVIVED — STREAK HALVED","#00FF99",100);
+        setUi(u=>({...u,state:"playing",reviveReady:false,deathOverlay:false,streak,multiplier:mult,score:Math.floor(rawScore*mult/10)}));
+        return;
+      }
       if(state==="idle"||(state==="dead"&&deathT>16)){
         initAudio(); reset(); state="playing";
-        setUi(u=>({...u,state:"playing",score:0,streak:0,multiplier:1,shielded:false,deathOverlay:false}));
+        setUi(u=>({...u,state:"playing",score:0,streak:0,multiplier:1,shielded:false,deathOverlay:false,reviveReady:false}));
       }
     }
 
@@ -843,7 +581,7 @@ function App(){
     };
   },[]);
 
-  const {state,score,best,streak,multiplier,shielded,tier,nextTier,nextMin,dailyDone,
+  const {state,score,best,streak,multiplier,shielded,tier,nextTier,nextMin,dailyDone,multTimer,multMax,pbPace,reviveReady,loginStreak,streakMilestone,
          ds,dStreak,dSurvival,dClean,dTip,newBest,delta,pbStreak,pbSurvival,deathOverlay,lastScore}=ui;
 
   return (
@@ -858,6 +596,7 @@ function App(){
           <span style={{color:multiplier>1?"#FFD700":"#00FFFF",fontWeight:700,fontSize:"17px"}}>
             {String(score||0).padStart(6,"0")}
           </span>
+          {pbPace&&state==="playing"&&<span style={{fontSize:"10px",color:"#00FF99",marginLeft:6}}>▲ PB PACE</span>}
           {multiplier>1&&<span style={{fontSize:"9px",color:"#FFD700",marginLeft:5}}>x{multiplier}</span>}
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
@@ -870,11 +609,24 @@ function App(){
         </div>
       </div>
 
+      {multiplier>1&&state==="playing"&&(
+        <div style={{width:`${W}px`,height:4,background:"rgba(255,255,255,0.1)",marginBottom:6,position:"relative"}}>
+          <div style={{height:"100%",width:`${Math.max(0,(multTimer/Math.max(1,multMax))*100)}%`,background:multTimer<120?"#FF6666":"#FFD700",boxShadow:"0 0 8px rgba(255,215,0,0.8)",transition:"width 80ms linear"}}/>
+        </div>
+      )}
+
       <div style={{position:"relative"}}>
         <canvas ref={canvasRef} width={W} height={H}
           style={{display:"block",cursor:"pointer",border:"1px solid rgba(0,255,255,0.08)",boxShadow:"0 0 80px rgba(0,255,255,0.04)"}}/>
 
-        {state==="dead"&&deathOverlay&&(
+        {state==="dead"&&reviveReady&&(
+          <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(0,0,12,0.74)",pointerEvents:"none"}}>
+            <div style={{fontSize:"24px",fontWeight:900,color:"#00FF99",letterSpacing:"3px",textShadow:"0 0 20px #00FF99",marginBottom:8}}>REVIVE AVAILABLE</div>
+            <div style={{fontSize:"9px",color:"rgba(255,255,255,0.8)",letterSpacing:"2px",animation:"pulse 0.6s ease-in-out infinite"}}>PRESS SPACE OR TAP WITHIN 2 SECONDS</div>
+          </div>
+        )}
+
+        {state==="dead"&&deathOverlay&&!reviveReady&&(
           <div style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",
             display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
             background:"rgba(0,0,12,0.84)",pointerEvents:"none"}}>
@@ -922,8 +674,9 @@ function App(){
             : "HOLD TO THRUST · RELEASE TO FALL"
           }
         </div>
-        <div style={{fontSize:"7px",letterSpacing:"2px",color:dailyDone?"#FFD700":"rgba(255,255,255,0.13)"}}>
-          {dailyDone?"DAILY DONE":getDaily().desc}
+        <div style={{fontSize:"7px",letterSpacing:"2px",color:dailyDone?"#FFD700":"rgba(255,255,255,0.13)",textAlign:"right"}}>
+          <div>{dailyDone?"DAILY DONE":getDaily().desc}</div>
+          <div style={{color:"rgba(0,255,180,0.45)",marginTop:2}}>LOGIN STREAK: {loginStreak} DAY{loginStreak===1?"":"S"}{streakMilestone?` · ${streakMilestone}`:""}</div>
         </div>
       </div>
 
